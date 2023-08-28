@@ -1,0 +1,22 @@
+target: model.swinir.SwinIR
+params:
+  img_size: 64
+  patch_size: 1
+  in_chans: 3
+  embed_dim: 180
+  depths: [6, 6, 6, 6, 6, 6, 6, 6]
+  num_heads: [6, 6, 6, 6, 6, 6, 6, 6]
+  window_size: 8
+  mlp_ratio: 2
+  sf: 8
+  img_range: 1.0
+  upsampler: "nearest+conv"
+  resi_connection: "1conv"
+  unshuffle: True
+  unshuffle_scale: 8
+
+  hq_key: jpg
+  lq_key: hint
+  # Learning rate.
+  learning_rate: 1e-4
+  weight_decay: 0

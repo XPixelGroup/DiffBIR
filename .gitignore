@@ -1,0 +1,9 @@
+__pycache__
+*.ckpt
+*.pth
+/data
+/exps
+*.sh
+!install_env.sh
+/weights
+/temp
