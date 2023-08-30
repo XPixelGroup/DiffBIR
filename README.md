@@ -4,7 +4,7 @@
 
 ## DiffBIR: Towards Blind Image Restoration with Generative Diffusion Prior
 
-[Paper](TODO) | [Project Page](https://0x3f3f3f3fun.github.io/projects/diffbir/)
+[Paper](https://arxiv.org/abs/2308.15070) | [Project Page](https://0x3f3f3f3fun.github.io/projects/diffbir/)
 
 ![visitors](https://visitor-badge.laobi.icu/badge?page_id=0x3f3f3f3fun/DiffBIR)
 
