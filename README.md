@@ -202,7 +202,7 @@ For face image restoration, we adopt the degradation model used in [DifFace](htt
 
 ##  <a name="update"></a>:new:Update
 
-- **2023.08.?**: Repo is released.
+- **2023.08.30**: Repo is released.
 
 ##  <a name="todo"></a>:climbing:TODO
 
