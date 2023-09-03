@@ -4,7 +4,7 @@ dataset:
     # Path to the file list.
     file_list: 
     out_size: 512
-    use_crop: true
+    crop_type: none
     use_hflip: False
     
     blur_kernel_size: 41
