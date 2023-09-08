@@ -6,7 +6,7 @@
 
 [Paper](https://arxiv.org/abs/2308.15070) | [Project Page](https://0x3f3f3f3fun.github.io/projects/diffbir/)
 
-![visitors](https://visitor-badge.laobi.icu/badge?page_id=XPixelGroup/DiffBIR)
+![visitors](https://visitor-badge.laobi.icu/badge?page_id=XPixelGroup/DiffBIR) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/camenduru/DiffBIR-colab/blob/main/DiffBIR_colab.ipynb)
 
 [Xinqi Lin](https://0x3f3f3f3fun.github.io/)<sup>1,\*</sup>, [Jingwen He](https://github.com/hejingwenhejingwen)<sup>2,\*</sup>, [Ziyan Chen](https://orcid.org/0000-0001-6277-5635)<sup>2</sup>, [Zhaoyang Lyu](https://scholar.google.com.tw/citations?user=gkXFhbwAAAAJ&hl=en)<sup>2</sup>, [Ben Fei](https://scholar.google.com/citations?user=skQROj8AAAAJ&hl=zh-CN&oi=ao)<sup>2</sup>, [Bo Dai](http://daibo.info/)<sup>2</sup>, [Wanli Ouyang](https://wlouyang.github.io/)<sup>2</sup>, [Yu Qiao](http://mmlab.siat.ac.cn/yuqiao)<sup>2</sup>, [Chao Dong](http://xpixel.group/2010/01/20/chaodong.html)<sup>1,2</sup>
 
@@ -51,6 +51,8 @@
 
 [<img src="assets/visual_results/face4.png" height="223px"/>](https://imgsli.com/MTk5ODM0) [<img src="assets/visual_results/face5.png" height="223px"/>](https://imgsli.com/MTk5ODM1) [<img src="assets/visual_results/face6.png" height="223px"/>](https://imgsli.com/MTk5ODM2)
 
+[<img src="assets/visual_results/whole_image1.png" height="410px"/>](https://imgsli.com/MjA0MzQw)
+
 <!-- </details> -->
 
 ## <a name="installation"></a>:gear:Installation
@@ -58,11 +60,7 @@
 - **CUDA** >= 11.3
 - **PyTorch** >= 1.12.1
 - **xformers** == 0.0.16
-<!-- 
-pytorch >= 1.12.1 with CUDA >= 11.3 (required by xformers) 
 
-chmod a+x install_env.sh && ./install_env.sh
--->
 ```shell
 # clone this repo
 git clone https://github.com/XPixelGroup/DiffBIR.git
@@ -90,14 +88,14 @@ pip install -r requirements.txt
 
 ## <a name="quick_start"></a>:flight_departure:Quick Start
 
-Download [general_full_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_full_v1.ckpt) and [general_swinir_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_swinir_v1.ckpt), then run the following command to interact with the gradio website.
+Download [general_full_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_full_v1.ckpt) and [general_swinir_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_swinir_v1.ckpt) to `weights/`, then run the following command to interact with the gradio website.
 
 ```
 python gradio_diffbir.py \
---ckpt [full_ckpt_path] \
+--ckpt weights/general_full_v1.ckpt \
 --config configs/model/cldm.yaml \
 --reload_swinir \
---swinir_ckpt [swinir_ckpt_path]
+--swinir_ckpt weights/general_swinir_v1.ckpt
 ```
 
 <div align="center">
@@ -110,24 +108,14 @@ python gradio_diffbir.py \
 
 #### General Image
 
-Download [general_full_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_full_v1.ckpt) and [general_swinir_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_swinir_v1.ckpt), then put your low-quality (lq) images in `lq_dir`. If you are confused about where the `reload_swinir` option came from, please refer to the [degradation details](#degradation-details).
+Download [general_full_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_full_v1.ckpt) and [general_swinir_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_swinir_v1.ckpt) to `weights/` and run the following command.
 
-<!-- ```shell
-python inference.py \
---input [lq_dir] \
---config configs/model/cldm.yaml \
---ckpt [full_ckpt_path] \
---reload_swinir --swinir_ckpt [swinir_ckpt_path] \
---steps 50 --sr_scale 1 --image_size 512 \
---color_fix_type wavelet --resize_back \
---output [output_dir_path]
-``` -->
 ```shell
 python inference.py \
 --input inputs/general \
 --config configs/model/cldm.yaml \
---ckpt [full_ckpt_path] \
---reload_swinir --swinir_ckpt [swinir_ckpt_path] \
+--ckpt weights/general_full_v1.ckpt \
+--reload_swinir --swinir_ckpt weights/general_swinir_v1.ckpt \
 --steps 50 \
 --sr_scale 4 \
 --image_size 512 \
@@ -135,38 +123,39 @@ python inference.py \
 --output results/general
 ```
 
+If you are confused about where the `reload_swinir` option came from, please refer to the [degradation details](#degradation-details).
+
 #### Face Image
-Download pretrained model [face_full_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/face_full_v1.ckpt) and [face_swinir_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/face_swinir_v1.ckpt) in `weights/`.
-
-<!-- 1. You can use inference.py script to restore aligned faces directly.
-```shell
-python inference.py \
---config configs/model/cldm.yaml \
---ckpt [full_ckpt_path] \
---input [lq_dir] \
---steps 50 --sr_scale 1 --image_size 512 \
---color_fix_type wavelet --resize_back \
---output [output_dir_path]
-```
--->
+Download [face_full_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/face_full_v1.ckpt) to `weights/` and run the following command.
 
 ```shell
+# for aligned face inputs
 python inference_face.py \
 --config configs/model/cldm.yaml \
 --ckpt weights/face_full_v1.ckpt \
---reload_swinir --swinir_ckpt weights/face_swinir_v1.ckpt \
---input inputs/faces/whole_img \
+--input inputs/face/aligned \
 --steps 50 \
 --sr_scale 1 \
 --image_size 512 \
 --color_fix_type wavelet \
---output results/faces --resize_back
+--output results/face/aligned --resize_back \
+--has_aligned
+
+# for unaligned face inputs
+python inference_face.py \
+--config configs/model/cldm.yaml \
+--ckpt weights/face_full_v1.ckpt \
+--input inputs/face/whole_img \
+--steps 50 \
+--sr_scale 1 \
+--image_size 512 \
+--color_fix_type wavelet \
+--output results/face/whole_img --resize_back
 ```
-Specify `--has_aligned` to aligned face inputs.
 
 ### Only Stage1 Model (Remove Degradations)
 
-Download [general_swinir_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_swinir_v1.ckpt), [face_swinir_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/face_swinir_v1.ckpt) for general, face image respectively, and put your low-quality (lq) images in `lq_dir`:
+Download [general_swinir_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_swinir_v1.ckpt), [face_swinir_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/face_swinir_v1.ckpt) for general, face image respectively, and run the following command.
 
 ```shell
 python scripts/inference_stage1.py \
@@ -279,13 +268,19 @@ For face image restoration, we adopt the degradation model used in [DifFace](htt
 ##  <a name="update"></a>:new:Update
 
 - **2023.08.30**: Repo is released.
+- **2023.09.06**: Update [colab demo](https://colab.research.google.com/github/camenduru/DiffBIR-colab/blob/main/DiffBIR_colab.ipynb). Thanks to [camenduru](https://github.com/camenduru)!:hugs:
+- **2023.09.08**: Add support for restoring unaligned faces.
 
 ##  <a name="todo"></a>:climbing:TODO
 
 - [x] Release code and pretrained models:computer:.
 - [x] Update links to paper and project page:link:.
-- [ ] Provide Colab demo and HuggingFace demo:notebook:.
+- [ ] Release real47 testset:minidisc:.
+- [ ] Reduce the memory usage of DiffBIR:smiley_cat:.
+- [ ] Provide HuggingFace demo:notebook:.
+- [ ] Upload inference code of latent image guidance:page_facing_up:.
 - [ ] Improve the performance:superhero:.
+- [ ] Add a patch-based sampling schedule:mag:.
 
 ## Citation
 

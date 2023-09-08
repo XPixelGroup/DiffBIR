@@ -137,7 +137,7 @@ class RealESRGANBatchTransform(BatchTransform):
         # training data synthesis
         hq = batch["hq"]
         if self.use_sharpener:
-            self.use_sharpener.to(hq)
+            self.usm_sharpener.to(hq)
             hq = self.usm_sharpener(hq)
         self.jpeger.to(hq)
         
