@@ -149,7 +149,7 @@ def main() -> None:
     
     assert os.path.isdir(args.input)
     
-    print(f"sampling {args.steps} steps using ddpm sampler")
+    print(f"sampling {args.steps} steps using {args.sampler} sampler")
     for file_path in list_image_files(args.input, follow_links=True):
         lq = Image.open(file_path).convert("RGB")
         if args.sr_scale != 1:

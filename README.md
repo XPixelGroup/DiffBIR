@@ -54,17 +54,29 @@
 <!-- </details> -->
 
 ## <a name="installation"></a>:gear:Installation
+- **Python** >= 3.9
+- **CUDA** >= 11.3
+- **PyTorch** >= 1.12.1
+- **xformers** == 0.0.16
+<!-- 
+pytorch >= 1.12.1 with CUDA >= 11.3 (required by xformers) 
 
+chmod a+x install_env.sh && ./install_env.sh
+-->
 ```shell
+# clone this repo
+git clone https://github.com/XPixelGroup/DiffBIR.git
+cd DiffBIR
+
 # create a conda environment with python >= 3.9
 conda create -n diffbir python=3.9
 conda activate diffbir
-# pytorch >= 1.12.1 with CUDA >= 11.3 (required by xformers)
-conda install pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit=11.3 -c pytorch
-# xformers 0.0.16
+
+conda install pytorch==1.12.1 torchvision==0.13.1 cudatoolkit=11.3 -c pytorch
 conda install xformers==0.0.16 -c xformers
+
 # other dependencies
-chmod a+x install_env.sh && ./install_env.sh
+pip install -r requirements.txt
 ```
 
 ## <a name="pretrained_models"></a>:dna:Pretrained Models
@@ -81,7 +93,11 @@ chmod a+x install_env.sh && ./install_env.sh
 Download [general_full_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_full_v1.ckpt) and [general_swinir_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_swinir_v1.ckpt), then run the following command to interact with the gradio website.
 
 ```
-python gradio_diffbir.py --ckpt [full_ckpt_path] --config configs/model/cldm.yaml --reload_swinir --swinir_ckpt [swinir_ckpt_path]
+python gradio_diffbir.py \
+--ckpt [full_ckpt_path] \
+--config configs/model/cldm.yaml \
+--reload_swinir \
+--swinir_ckpt [swinir_ckpt_path]
 ```
 
 <div align="center">
@@ -96,24 +112,69 @@ python gradio_diffbir.py --ckpt [full_ckpt_path] --config configs/model/cldm.yam
 
 Download [general_full_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_full_v1.ckpt) and [general_swinir_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_swinir_v1.ckpt), then put your low-quality (lq) images in `lq_dir`. If you are confused about where the `reload_swinir` option came from, please refer to the [degradation details](#degradation-details).
 
+<!-- ```shell
+python inference.py \
+--input [lq_dir] \
+--config configs/model/cldm.yaml \
+--ckpt [full_ckpt_path] \
+--reload_swinir --swinir_ckpt [swinir_ckpt_path] \
+--steps 50 --sr_scale 1 --image_size 512 \
+--color_fix_type wavelet --resize_back \
+--output [output_dir_path]
+``` -->
 ```shell
-python inference.py --config configs/model/cldm.yaml --ckpt [full_ckpt_path] --reload_swinir --swinir_ckpt [swinir_ckpt_path] --steps 50 --input [lq_dir] --sr_scale 1 --image_size 512 --color_fix_type wavelet --resize_back --output [output_dir_path]
+python inference.py \
+--input inputs/general \
+--config configs/model/cldm.yaml \
+--ckpt [full_ckpt_path] \
+--reload_swinir --swinir_ckpt [swinir_ckpt_path] \
+--steps 50 \
+--sr_scale 4 \
+--image_size 512 \
+--color_fix_type wavelet --resize_back \
+--output results/general
 ```
 
 #### Face Image
+Download pretrained model [face_full_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/face_full_v1.ckpt) and [face_swinir_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/face_swinir_v1.ckpt) in `weights/`.
 
-Download [face_full_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/face_full_v1.ckpt) and put your low-quality (lq) images in `lq_dir`.
+<!-- 1. You can use inference.py script to restore aligned faces directly.
+```shell
+python inference.py \
+--config configs/model/cldm.yaml \
+--ckpt [full_ckpt_path] \
+--input [lq_dir] \
+--steps 50 --sr_scale 1 --image_size 512 \
+--color_fix_type wavelet --resize_back \
+--output [output_dir_path]
+```
+-->
 
 ```shell
-python inference.py --config configs/model/cldm.yaml --ckpt [full_ckpt_path] --steps 50 --input [lq_dir] --sr_scale 1 --image_size 512 --color_fix_type wavelet --resize_back --output [output_dir_path]
+python inference_face.py \
+--config configs/model/cldm.yaml \
+--ckpt weights/face_full_v1.ckpt \
+--reload_swinir --swinir_ckpt weights/face_swinir_v1.ckpt \
+--input inputs/faces/whole_img \
+--steps 50 \
+--sr_scale 1 \
+--image_size 512 \
+--color_fix_type wavelet \
+--output results/faces --resize_back
 ```
+Specify `--has_aligned` to aligned face inputs.
 
 ### Only Stage1 Model (Remove Degradations)
 
 Download [general_swinir_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_swinir_v1.ckpt), [face_swinir_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/face_swinir_v1.ckpt) for general, face image respectively, and put your low-quality (lq) images in `lq_dir`:
 
 ```shell
-python scripts/inference_stage1.py --config configs/model/swinir.yaml --ckpt [swinir_ckpt_path] --input [lq_dir] --sr_scale 1 --image_size 512 --output [output_dir_path]
+python scripts/inference_stage1.py \
+--config configs/model/swinir.yaml \
+--ckpt [swinir_ckpt_path] \
+--input [lq_dir] \
+--sr_scale 1 --image_size 512 \
+--output [output_dir_path]
 ```
 
 ### Only Stage2 Model (Refine Details)
@@ -124,7 +185,14 @@ Since the proposed two-stage pipeline is very flexible, you can utilize other aw
 # step1: Use other models to remove degradations and save results in [img_dir_path].
 
 # step2: Refine details of step1 outputs.
-python inference.py --config configs/model/cldm.yaml --ckpt [full_ckpt_path] --steps 50 --input [img_dir_path] --sr_scale 1 --image_size 512 --color_fix_type wavelet --resize_back --output [output_dir_path] --disable_preprocess_model
+python inference.py \
+--config configs/model/cldm.yaml \
+--ckpt [full_ckpt_path] \
+--steps 50 --sr_scale 1 --image_size 512 \
+--input [img_dir_path] \
+--color_fix_type wavelet --resize_back \
+--output [output_dir_path] \
+--disable_preprocess_model
 ```
 
 ##  <a name="train"></a>:stars:Train
@@ -140,7 +208,11 @@ For face image restoration, we adopt the degradation model used in [DifFace](htt
 1. Generate file list of training set and validation set.
 
     ```shell
-    python scripts/make_file_list.py --img_folder [hq_dir_path] --val_size [validation_set_size] --save_folder [save_dir_path] --follow_links
+    python scripts/make_file_list.py \
+    --img_folder [hq_dir_path] \
+    --val_size [validation_set_size] \
+    --save_folder [save_dir_path] \
+    --follow_links
     ```
     
     This script will collect all image files in `img_folder` and split them into training set and validation set automatically. You will get two file lists in `save_folder`, each line in a file list contains an absolute path of an image file:
@@ -185,7 +257,11 @@ For face image restoration, we adopt the degradation model used in [DifFace](htt
 2. Create the initial model weights.
 
     ```shell
-    python scripts/make_stage2_init_weight.py --cldm_config configs/model/cldm.yaml --sd_weight [sd_v2.1_ckpt_path] --swinir_weight [swinir_ckpt_path] --output [init_weight_output_path]
+    python scripts/make_stage2_init_weight.py \
+    --cldm_config configs/model/cldm.yaml \
+    --sd_weight [sd_v2.1_ckpt_path] \
+    --swinir_weight [swinir_ckpt_path] \
+    --output [init_weight_output_path]
     ```
 
     You will see some [outputs](assets/init_weight_outputs.txt) which show the weight initialization.

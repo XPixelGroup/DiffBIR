@@ -1,0 +1,14 @@
+pytorch_lightning==1.4.2
+einops
+open-clip-torch
+omegaconf
+torchmetrics==0.6.0
+triton
+opencv-python-headless
+scipy
+matplotlib
+lpips
+gradio
+chardet
+transformers
+facexlib
