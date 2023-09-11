@@ -38,7 +38,7 @@ def process(
         control_imgs (List[np.ndarray]): A list of low-quality images (HWC, RGB, range in [0, 255])
         sampler (str): Sampler name.
         steps (int): Sampling steps.
-        strength (float): Control strength. Set to 1.0 during traning.
+        strength (float): Control strength. Set to 1.0 during training.
         color_fix_type (str): Type of color correction for samples.
         disable_preprocess_model (bool): If specified, preprocess model (SwinIR) will not be used.
     
@@ -150,63 +150,63 @@ def main() -> None:
     assert os.path.isdir(args.input)
     
     print(f"sampling {args.steps} steps using {args.sampler} sampler")
-    for file_path in list_image_files(args.input, follow_links=True):
-        lq = Image.open(file_path).convert("RGB")
-        if args.sr_scale != 1:
-            lq = lq.resize(
-                tuple(math.ceil(x * args.sr_scale) for x in lq.size),
-                Image.BICUBIC
-            )
-        lq_resized = auto_resize(lq, args.image_size)
-        x = pad(np.array(lq_resized), scale=64)
-        
-        for i in range(args.repeat_times):
-            save_path = os.path.join(args.output, os.path.relpath(file_path, args.input))
-            parent_path, stem, _ = get_file_name_parts(save_path)
-            save_path = os.path.join(parent_path, f"{stem}_{i}.png")
-            if os.path.exists(save_path):
-                if args.skip_if_exist:
-                    print(f"skip {save_path}")
-                    continue
-                else:
-                    raise RuntimeError(f"{save_path} already exist")
-            os.makedirs(parent_path, exist_ok=True)
-            
-            try:
-                preds, stage1_preds = process(
-                    model, [x], steps=args.steps, sampler=args.sampler,
-                    strength=1,
-                    color_fix_type=args.color_fix_type,
-                    disable_preprocess_model=args.disable_preprocess_model
+    with torch.autocast(device):
+        for file_path in list_image_files(args.input, follow_links=True):
+            lq = Image.open(file_path).convert("RGB")
+            if args.sr_scale != 1:
+                lq = lq.resize(
+                    tuple(math.ceil(x * args.sr_scale) for x in lq.size),
+                    Image.BICUBIC
                 )
-            except RuntimeError as e:
-                # Avoid cuda_out_of_memory error.
-                print(f"{file_path}, error: {e}")
-                continue
+            lq_resized = auto_resize(lq, args.image_size)
+            x = pad(np.array(lq_resized), scale=64)
             
-            pred, stage1_pred = preds[0], stage1_preds[0]
-            
-            # remove padding
-            pred = pred[:lq_resized.height, :lq_resized.width, :]
-            stage1_pred = stage1_pred[:lq_resized.height, :lq_resized.width, :]
-            
-            if args.show_lq:
-                if args.resize_back:
-                    if lq_resized.size != lq.size:
-                        pred = np.array(Image.fromarray(pred).resize(lq.size, Image.LANCZOS))
-                        stage1_pred = np.array(Image.fromarray(stage1_pred).resize(lq.size, Image.LANCZOS))
-                    lq = np.array(lq)
+            for i in range(args.repeat_times):
+                save_path = os.path.join(args.output, os.path.relpath(file_path, args.input))
+                parent_path, stem, _ = get_file_name_parts(save_path)
+                save_path = os.path.join(parent_path, f"{stem}_{i}.png")
+                if os.path.exists(save_path):
+                    if args.skip_if_exist:
+                        print(f"skip {save_path}")
+                        continue
+                    else:
+                        raise RuntimeError(f"{save_path} already exist")
+                os.makedirs(parent_path, exist_ok=True)
+                
+                try:
+                    preds, stage1_preds = process(
+                        model, [x], steps=args.steps, sampler=args.sampler,
+                        strength=1,
+                        color_fix_type=args.color_fix_type,
+                        disable_preprocess_model=args.disable_preprocess_model
+                    )
+                except RuntimeError as e:
+                    # Avoid cuda_out_of_memory error.
+                    print(f"{file_path}, error: {e}")
+                    continue
+                
+                pred, stage1_pred = preds[0], stage1_preds[0]
+                
+                # remove padding
+                pred = pred[:lq_resized.height, :lq_resized.width, :]
+                stage1_pred = stage1_pred[:lq_resized.height, :lq_resized.width, :]
+                
+                if args.show_lq:
+                    if args.resize_back:
+                        if lq_resized.size != lq.size:
+                            pred = np.array(Image.fromarray(pred).resize(lq.size, Image.LANCZOS))
+                            stage1_pred = np.array(Image.fromarray(stage1_pred).resize(lq.size, Image.LANCZOS))
+                        lq = np.array(lq)
+                    else:
+                        lq = np.array(lq_resized)
+                    images = [lq, pred] if args.disable_preprocess_model else [lq, stage1_pred, pred]
+                    Image.fromarray(np.concatenate(images, axis=1)).save(save_path)
                 else:
-                    lq = np.array(lq_resized)
-                images = [lq, pred] if args.disable_preprocess_model else [lq, stage1_pred, pred]
-                Image.fromarray(np.concatenate(images, axis=1)).save(save_path)
-            else:
-                if args.resize_back and lq_resized.size != lq.size:
-                    Image.fromarray(pred).resize(lq.size, Image.LANCZOS).save(save_path)
-                else:
-                    Image.fromarray(pred).save(save_path)
-            print(f"save to {save_path}")
-
+                    if args.resize_back and lq_resized.size != lq.size:
+                        Image.fromarray(pred).resize(lq.size, Image.LANCZOS).save(save_path)
+                    else:
+                        Image.fromarray(pred).save(save_path)
+                print(f"save to {save_path}")
 
 if __name__ == "__main__":
     main()
