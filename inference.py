@@ -10,6 +10,7 @@ import pytorch_lightning as pl
 from PIL import Image
 from omegaconf import OmegaConf
 
+from ldm.xformers_state import disable_xformers
 from model.spaced_sampler import SpacedSampler
 from model.ddim_sampler import DDIMSampler
 from model.cldm import ControlLDM
@@ -127,6 +128,7 @@ def parse_args() -> Namespace:
     parser.add_argument("--skip_if_exist", action="store_true")
     
     parser.add_argument("--seed", type=int, default=231)
+    parser.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda"])
     
     return parser.parse_args()
 
@@ -134,7 +136,9 @@ def parse_args() -> Namespace:
 def main() -> None:
     args = parse_args()
     pl.seed_everything(args.seed)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    
+    if args.device == "cpu":
+        disable_xformers()
     
     model: ControlLDM = instantiate_from_config(OmegaConf.load(args.config))
     load_state_dict(model, torch.load(args.ckpt, map_location="cpu"), strict=True)
@@ -145,68 +149,68 @@ def main() -> None:
         print(f"reload swinir model from {args.swinir_ckpt}")
         load_state_dict(model.preprocess_model, torch.load(args.swinir_ckpt, map_location="cpu"), strict=True)
     model.freeze()
-    model.to(device)
+    model.to(args.device)
     
     assert os.path.isdir(args.input)
     
     print(f"sampling {args.steps} steps using {args.sampler} sampler")
-    with torch.autocast(device):
-        for file_path in list_image_files(args.input, follow_links=True):
-            lq = Image.open(file_path).convert("RGB")
-            if args.sr_scale != 1:
-                lq = lq.resize(
-                    tuple(math.ceil(x * args.sr_scale) for x in lq.size),
-                    Image.BICUBIC
-                )
-            lq_resized = auto_resize(lq, args.image_size)
-            x = pad(np.array(lq_resized), scale=64)
-            
-            for i in range(args.repeat_times):
-                save_path = os.path.join(args.output, os.path.relpath(file_path, args.input))
-                parent_path, stem, _ = get_file_name_parts(save_path)
-                save_path = os.path.join(parent_path, f"{stem}_{i}.png")
-                if os.path.exists(save_path):
-                    if args.skip_if_exist:
-                        print(f"skip {save_path}")
-                        continue
-                    else:
-                        raise RuntimeError(f"{save_path} already exist")
-                os.makedirs(parent_path, exist_ok=True)
-                
-                try:
-                    preds, stage1_preds = process(
-                        model, [x], steps=args.steps, sampler=args.sampler,
-                        strength=1,
-                        color_fix_type=args.color_fix_type,
-                        disable_preprocess_model=args.disable_preprocess_model
-                    )
-                except RuntimeError as e:
-                    # Avoid cuda_out_of_memory error.
-                    print(f"{file_path}, error: {e}")
+    # with torch.autocast(device, dtype=torch.bfloat16):
+    for file_path in list_image_files(args.input, follow_links=True):
+        lq = Image.open(file_path).convert("RGB")
+        if args.sr_scale != 1:
+            lq = lq.resize(
+                tuple(math.ceil(x * args.sr_scale) for x in lq.size),
+                Image.BICUBIC
+            )
+        lq_resized = auto_resize(lq, args.image_size)
+        x = pad(np.array(lq_resized), scale=64)
+        
+        for i in range(args.repeat_times):
+            save_path = os.path.join(args.output, os.path.relpath(file_path, args.input))
+            parent_path, stem, _ = get_file_name_parts(save_path)
+            save_path = os.path.join(parent_path, f"{stem}_{i}.png")
+            if os.path.exists(save_path):
+                if args.skip_if_exist:
+                    print(f"skip {save_path}")
                     continue
-                
-                pred, stage1_pred = preds[0], stage1_preds[0]
-                
-                # remove padding
-                pred = pred[:lq_resized.height, :lq_resized.width, :]
-                stage1_pred = stage1_pred[:lq_resized.height, :lq_resized.width, :]
-                
-                if args.show_lq:
-                    if args.resize_back:
-                        if lq_resized.size != lq.size:
-                            pred = np.array(Image.fromarray(pred).resize(lq.size, Image.LANCZOS))
-                            stage1_pred = np.array(Image.fromarray(stage1_pred).resize(lq.size, Image.LANCZOS))
-                        lq = np.array(lq)
-                    else:
-                        lq = np.array(lq_resized)
-                    images = [lq, pred] if args.disable_preprocess_model else [lq, stage1_pred, pred]
-                    Image.fromarray(np.concatenate(images, axis=1)).save(save_path)
                 else:
-                    if args.resize_back and lq_resized.size != lq.size:
-                        Image.fromarray(pred).resize(lq.size, Image.LANCZOS).save(save_path)
-                    else:
-                        Image.fromarray(pred).save(save_path)
-                print(f"save to {save_path}")
+                    raise RuntimeError(f"{save_path} already exist")
+            os.makedirs(parent_path, exist_ok=True)
+            
+            # try:
+            preds, stage1_preds = process(
+                model, [x], steps=args.steps, sampler=args.sampler,
+                strength=1,
+                color_fix_type=args.color_fix_type,
+                disable_preprocess_model=args.disable_preprocess_model
+            )
+            # except RuntimeError as e:
+            #     # Avoid cuda_out_of_memory error.
+            #     print(f"{file_path}, error: {e}")
+            #     continue
+            
+            pred, stage1_pred = preds[0], stage1_preds[0]
+            
+            # remove padding
+            pred = pred[:lq_resized.height, :lq_resized.width, :]
+            stage1_pred = stage1_pred[:lq_resized.height, :lq_resized.width, :]
+            
+            if args.show_lq:
+                if args.resize_back:
+                    if lq_resized.size != lq.size:
+                        pred = np.array(Image.fromarray(pred).resize(lq.size, Image.LANCZOS))
+                        stage1_pred = np.array(Image.fromarray(stage1_pred).resize(lq.size, Image.LANCZOS))
+                    lq = np.array(lq)
+                else:
+                    lq = np.array(lq_resized)
+                images = [lq, pred] if args.disable_preprocess_model else [lq, stage1_pred, pred]
+                Image.fromarray(np.concatenate(images, axis=1)).save(save_path)
+            else:
+                if args.resize_back and lq_resized.size != lq.size:
+                    Image.fromarray(pred).resize(lq.size, Image.LANCZOS).save(save_path)
+                else:
+                    Image.fromarray(pred).save(save_path)
+            print(f"save to {save_path}")
 
 if __name__ == "__main__":
     main()

@@ -140,7 +140,8 @@ class FrozenOpenCLIPEmbedder(AbstractEncoder):
         "last",
         "penultimate"
     ]
-    def __init__(self, arch="ViT-H-14", version="laion2b_s32b_b79k", device="cuda", max_length=77,
+    # def __init__(self, arch="ViT-H-14", version="laion2b_s32b_b79k", device="cuda", max_length=77,
+    def __init__(self, arch="ViT-H-14", version="laion2b_s32b_b79k", max_length=77,
                  freeze=True, layer="last"):
         super().__init__()
         assert layer in self.LAYERS
@@ -148,7 +149,7 @@ class FrozenOpenCLIPEmbedder(AbstractEncoder):
         del model.visual
         self.model = model
 
-        self.device = device
+        # self.device = device
         self.max_length = max_length
         if freeze:
             self.freeze()
@@ -167,7 +168,8 @@ class FrozenOpenCLIPEmbedder(AbstractEncoder):
 
     def forward(self, text):
         tokens = open_clip.tokenize(text)
-        z = self.encode_with_transformer(tokens.to(self.device))
+        # z = self.encode_with_transformer(tokens.to(self.device))
+        z = self.encode_with_transformer(tokens.to(next(self.model.parameters()).device))
         return z
 
     def encode_with_transformer(self, text):
