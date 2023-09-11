@@ -174,13 +174,14 @@ def main() -> None:
                 save_restore_path = os.path.join(parent_path, 'restored_faces', save_face_name)
                 Image.fromarray(restored_face).save(save_restore_path)
 
-            # remove padding
-            restored_img = restored_img[:lq_resized.height, :lq_resized.width, :]
-            # save restored image
-            if args.resize_back and lq_resized.size != lq.size:
-                Image.fromarray(restored_img).resize(lq.size, Image.LANCZOS).convert("RGB").save(restored_img_path)
-            else:
-                Image.fromarray(restored_img).convert("RGB").save(restored_img_path)
+            if not args.has_aligned:
+                # remove padding
+                restored_img = restored_img[:lq_resized.height, :lq_resized.width, :]
+                # save restored image
+                if args.resize_back and lq_resized.size != lq.size:
+                    Image.fromarray(restored_img).resize(lq.size, Image.LANCZOS).convert("RGB").save(restored_img_path)
+                else:
+                    Image.fromarray(restored_img).convert("RGB").save(restored_img_path)
             print(f"Face image {basename} saved to {parent_path}")
 
 
