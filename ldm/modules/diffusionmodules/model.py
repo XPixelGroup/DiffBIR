@@ -7,14 +7,16 @@ from einops import rearrange
 from typing import Optional, Any
 
 from ldm.modules.attention import MemoryEfficientCrossAttention
+from ldm import xformers_state
 
-try:
-    import xformers
-    import xformers.ops
-    XFORMERS_IS_AVAILBLE = True
-except:
-    XFORMERS_IS_AVAILBLE = False
-    print("No module 'xformers'. Proceeding without it.")
+
+# try:
+#     import xformers
+#     import xformers.ops
+#     XFORMERS_IS_AVAILBLE = True
+# except:
+#     XFORMERS_IS_AVAILBLE = False
+#     print("No module 'xformers'. Proceeding without it.")
 
 
 def get_timestep_embedding(timesteps, embedding_dim):
@@ -255,7 +257,7 @@ class MemoryEfficientAttnBlock(nn.Module):
             .contiguous(),
             (q, k, v),
         )
-        out = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=None, op=self.attention_op)
+        out = xformers_state.xformers.ops.memory_efficient_attention(q, k, v, attn_bias=None, op=self.attention_op)
 
         out = (
             out.unsqueeze(0)
@@ -279,7 +281,8 @@ class MemoryEfficientCrossAttentionWrapper(MemoryEfficientCrossAttention):
 
 def make_attn(in_channels, attn_type="vanilla", attn_kwargs=None):
     assert attn_type in ["vanilla", "vanilla-xformers", "memory-efficient-cross-attn", "linear", "none"], f'attn_type {attn_type} unknown'
-    if XFORMERS_IS_AVAILBLE and attn_type == "vanilla":
+    # if XFORMERS_IS_AVAILBLE and attn_type == "vanilla":
+    if xformers_state.is_xformers_available() and attn_type == "vanilla":
         attn_type = "vanilla-xformers"
     print(f"making attention of type '{attn_type}' with {in_channels} in_channels")
     if attn_type == "vanilla":

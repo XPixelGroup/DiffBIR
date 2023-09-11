@@ -10,6 +10,7 @@ import gradio as gr
 from PIL import Image
 from omegaconf import OmegaConf
 
+from ldm.xformers_state import disable_xformers
 from model.spaced_sampler import SpacedSampler
 from model.cldm import ControlLDM
 from utils.image import (
@@ -23,10 +24,12 @@ parser.add_argument("--config", required=True, type=str)
 parser.add_argument("--ckpt", type=str, required=True)
 parser.add_argument("--reload_swinir", action="store_true")
 parser.add_argument("--swinir_ckpt", type=str, default="")
+parser.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda"])
 args = parser.parse_args()
 
 # load model
-device = "cuda" if torch.cuda.is_available() else "cpu"
+if args.device == "cpu":
+    disable_xformers()
 model: ControlLDM = instantiate_from_config(OmegaConf.load(args.config))
 load_state_dict(model, torch.load(args.ckpt, map_location="cpu"), strict=True)
 # reload preprocess model if specified
@@ -34,7 +37,7 @@ if args.reload_swinir:
     print(f"reload swinir model from {args.swinir_ckpt}")
     load_state_dict(model.preprocess_model, torch.load(args.swinir_ckpt, map_location="cpu"), strict=True)
 model.freeze()
-model.to(device)
+model.to(args.device)
 # load sampler
 sampler = SpacedSampler(model, var_type="fixed_small")
 

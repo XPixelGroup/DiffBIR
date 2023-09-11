@@ -10,6 +10,7 @@ from argparse import ArgumentParser, Namespace
 
 from facexlib.utils.face_restoration_helper import FaceRestoreHelper
 
+from ldm.xformers_state import disable_xformers
 from model.cldm import ControlLDM
 from model.ddim_sampler import DDIMSampler
 from model.spaced_sampler import SpacedSampler
@@ -56,6 +57,7 @@ def parse_args() -> Namespace:
     parser.add_argument("--skip_if_exist", action="store_true")
     
     parser.add_argument("--seed", type=int, default=231)
+    parser.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda"])
     
     return parser.parse_args()
 
@@ -64,7 +66,9 @@ def main() -> None:
     args = parse_args()
     img_save_ext = 'png'
     pl.seed_everything(args.seed)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    
+    if args.device == "cpu":
+        disable_xformers()
     
     model: ControlLDM = instantiate_from_config(OmegaConf.load(args.config))
     load_state_dict(model, torch.load(args.ckpt, map_location="cpu"), strict=True)
@@ -75,13 +79,13 @@ def main() -> None:
         print(f"reload swinir model from {args.swinir_ckpt}")
         load_state_dict(model.preprocess_model, torch.load(args.swinir_ckpt, map_location="cpu"), strict=True)
     model.freeze()
-    model.to(device)
+    model.to(args.device)
     
     assert os.path.isdir(args.input)
 
     # ------------------ set up FaceRestoreHelper -------------------
     face_helper = FaceRestoreHelper(
-        device=device, 
+        device=args.device, 
         upscale_factor=1, 
         face_size=args.image_size, 
         use_parse=True,

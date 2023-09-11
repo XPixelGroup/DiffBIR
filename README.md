@@ -95,7 +95,8 @@ python gradio_diffbir.py \
 --ckpt weights/general_full_v1.ckpt \
 --config configs/model/cldm.yaml \
 --reload_swinir \
---swinir_ckpt weights/general_swinir_v1.ckpt
+--swinir_ckpt weights/general_swinir_v1.ckpt \
+--device cuda
 ```
 
 <div align="center">
@@ -120,7 +121,8 @@ python inference.py \
 --sr_scale 4 \
 --image_size 512 \
 --color_fix_type wavelet --resize_back \
---output results/general
+--output results/general \
+--device cuda
 ```
 
 If you are confused about where the `reload_swinir` option came from, please refer to the [degradation details](#degradation-details).
@@ -139,7 +141,8 @@ python inference_face.py \
 --image_size 512 \
 --color_fix_type wavelet \
 --output results/face/aligned --resize_back \
---has_aligned
+--has_aligned \
+--device cuda
 
 # for unaligned face inputs
 python inference_face.py \
@@ -150,7 +153,8 @@ python inference_face.py \
 --sr_scale 1 \
 --image_size 512 \
 --color_fix_type wavelet \
---output results/face/whole_img --resize_back
+--output results/face/whole_img --resize_back \
+--device cuda
 ```
 
 ### Only Stage1 Model (Remove Degradations)
@@ -181,7 +185,8 @@ python inference.py \
 --input [img_dir_path] \
 --color_fix_type wavelet --resize_back \
 --output [output_dir_path] \
---disable_preprocess_model
+--disable_preprocess_model \
+--device cuda
 ```
 
 ##  <a name="train"></a>:stars:Train
