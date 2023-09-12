@@ -21,13 +21,13 @@
 ## :book:Table Of Contents
 
 - [Visual Results On Real-world Images](#visual_results)
+- [Update](#update)
+- [TODO](#todo)
 - [Installation](#installation)
 - [Pretrained Models](#pretrained_models)
 - [Quick Start (gradio demo)](#quick_start)
 - [Inference](#inference)
 - [Train](#train)
-- [Update](#update)
-- [TODO](#todo)
 
 ## <a name="visual_results"></a>:eyes:Visual Results On Real-world Images
 
@@ -54,6 +54,24 @@
 [<img src="assets/visual_results/whole_image1.png" height="410px"/>](https://imgsli.com/MjA0MzQw)
 
 <!-- </details> -->
+
+## <a name="update"></a>:new:Update
+
+- **2023.08.30**: Repo is released.
+- **2023.09.06**: Update [colab demo](https://colab.research.google.com/github/camenduru/DiffBIR-colab/blob/main/DiffBIR_colab.ipynb). Thanks to [camenduru](https://github.com/camenduru)!:hugs:
+- **2023.09.08**: Add support for restoring unaligned faces.
+- **2023.09.12**: Upload inference code of latent image guidance and release [real47](inputs/real47) testset.
+
+## <a name="todo"></a>:climbing:TODO
+
+- [x] Release code and pretrained models:computer:.
+- [x] Update links to paper and project page:link:.
+- [x] Release real47 testset:minidisc:.
+- [ ] Provide webui and reduce the memory usage of DiffBIR:fire::fire::fire:.
+- [ ] Provide HuggingFace demo:notebook::fire::fire::fire:.
+- [x] Upload inference code of latent image guidance:page_facing_up:.
+- [ ] Improve the performance:superhero:.
+- [ ] Add a patch-based sampling schedule:mag:.
 
 ## <a name="installation"></a>:gear:Installation
 - **Python** >= 3.9
@@ -210,7 +228,7 @@ python inference.py \
 --device cuda
 ```
 
-##  <a name="train"></a>:stars:Train
+## <a name="train"></a>:stars:Train
 
 ### Degradation Details
 
@@ -290,24 +308,6 @@ For face image restoration, we adopt the degradation model used in [DifFace](htt
     ```shell
     python train.py --config [training_config_path]
     ```
-
-##  <a name="update"></a>:new:Update
-
-- **2023.08.30**: Repo is released.
-- **2023.09.06**: Update [colab demo](https://colab.research.google.com/github/camenduru/DiffBIR-colab/blob/main/DiffBIR_colab.ipynb). Thanks to [camenduru](https://github.com/camenduru)!:hugs:
-- **2023.09.08**: Add support for restoring unaligned faces.
-- **2023.09.12**: Upload inference code of latent image guidance and release [real47](inputs/real47) testset.
-
-##  <a name="todo"></a>:climbing:TODO
-
-- [x] Release code and pretrained models:computer:.
-- [x] Update links to paper and project page:link:.
-- [x] Release real47 testset:minidisc:.
-- [ ] Provide webui and reduce the memory usage of DiffBIR:fire::fire::fire:.
-- [ ] Provide HuggingFace demo:notebook::fire::fire::fire:.
-- [x] Upload inference code of latent image guidance:page_facing_up:.
-- [ ] Improve the performance:superhero:.
-- [ ] Add a patch-based sampling schedule:mag:.
 
 ## Citation
 
