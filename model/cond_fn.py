@@ -1,24 +1,43 @@
-from typing import overload
+from typing import overload, Optional
 import torch
 from torch.nn import functional as F
 
 
 class Guidance:
-    
-    def __init__(self, scale, type, t_start, t_stop, space, repeat, loss_type):
+
+    def __init__(
+        self,
+        scale: float,
+        t_start: int,
+        t_stop: int,
+        space: str,
+        repeat: int
+    ) -> "Guidance":
+        """
+        Initialize latent image guidance.
+        
+        Args:
+            scale (float): Gradient scale (denoted as `s` in our paper). The larger the gradient scale, 
+                the closer the final result will be to the output of the first stage model.
+            t_start (int), t_stop (int): The timestep to start or stop guidance. Note that the sampling 
+                process starts from t=1000 to t=0, the `t_start` should be larger than `t_stop`.
+            space (str): The data space for computing loss function (rgb or latent).
+            repeat (int): Repeat gradient descent for `repeat` times.
+
+        Our latent image guidance is based on [GDP](https://github.com/Fayeben/GenerativeDiffusionPrior).
+        Thanks for their work!
+        """
         self.scale = scale
-        self.type = type
         self.t_start = t_start
         self.t_stop = t_stop
         self.target = None
         self.space = space
         self.repeat = repeat
-        self.loss_type = loss_type
     
-    def load_target(self, target):
+    def load_target(self, target: torch.Tensor) -> torch.Tensor:
         self.target = target
 
-    def __call__(self, target_x0, pred_x0, t):
+    def __call__(self, target_x0: torch.Tensor, pred_x0: torch.Tensor, t: int) -> Optional[torch.Tensor]:
         if self.t_stop < t and t < self.t_start:
             # print("sampling with classifier guidance")
             # avoid propagating gradient out of this scope
@@ -29,30 +48,31 @@ class Guidance:
             return None
     
     @overload
-    def _forward(self, target_x0, pred_x0): ...
+    def _forward(self, target_x0: torch.Tensor, pred_x0: torch.Tensor) -> torch.Tensor:
+        ...
 
 
 class MSEGuidance(Guidance):
     
-    def __init__(self, scale, type, t_start, t_stop, space, repeat, loss_type) -> None:
+    def __init__(
+        self,
+        scale: float,
+        t_start: int,
+        t_stop: int,
+        space: str,
+        repeat: int
+    ) -> "MSEGuidance":
         super().__init__(
-            scale, type, t_start, t_stop, space, repeat, loss_type
+            scale, t_start, t_stop, space, repeat
         )
     
     @torch.enable_grad()
-    def _forward(self, target_x0: torch.Tensor, pred_x0: torch.Tensor):
+    def _forward(self, target_x0: torch.Tensor, pred_x0: torch.Tensor) -> torch.Tensor:
         # inputs: [-1, 1], nchw, rgb
         pred_x0.requires_grad_(True)
         
-        if self.loss_type == "mse":
-            loss = (pred_x0 - target_x0).pow(2).mean((1, 2, 3)).sum()
-        elif self.loss_type == "downsample_mse":
-            # FIXME: scale_factor should be 1/4, not 4
-            lr_pred_x0 = F.interpolate(pred_x0, scale_factor=4, mode="bicubic")
-            lr_target_x0 = F.interpolate(target_x0, scale_factor=4, mode="bicubic")
-            loss = (lr_pred_x0 - lr_target_x0).pow(2).mean((1, 2, 3)).sum()
-        else:
-            raise ValueError(self.loss_type)
+        # This is what we actually use.
+        loss = (pred_x0 - target_x0).pow(2).mean((1, 2, 3)).sum()
         
         print(f"loss = {loss.item()}")
         return -torch.autograd.grad(loss, pred_x0)[0]

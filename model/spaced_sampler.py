@@ -258,6 +258,7 @@ class SpacedSampler:
             # ----------------- compute gradient for x0 in latent space ----------------- #
             target, pred = None, None
             if cond_fn.space == "latent":
+                # This is what we actually use.
                 target = self.model.get_first_stage_encoding(
                     self.model.encode_first_stage(cond_fn.target.to(device))
                 )
