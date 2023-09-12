@@ -68,7 +68,7 @@
 - [x] Update links to paper and project page:link:.
 - [x] Release real47 testset:minidisc:.
 - [ ] Provide webui and reduce the memory usage of DiffBIR:fire::fire::fire:.
-- [ ] Provide HuggingFace demo:notebook::fire::fire::fire:.
+- [ ] Provide Hugging Face demo:notebook::fire::fire::fire:.
 - [x] Upload inference code of latent image guidance:page_facing_up:.
 - [ ] Improve the performance:superhero:.
 - [ ] Add a patch-based sampling schedule:mag:.
@@ -97,7 +97,7 @@ pip install -r requirements.txt
 
 ## <a name="pretrained_models"></a>:dna:Pretrained Models
 
-| Model Name | Description | HuggingFace | BaiduNetdisk |
+| Model Name | Description | Hugging Face | BaiduNetdisk |
 | :--------- | :---------- | :---------- | :---------- |
 | general_swinir_v1.ckpt | Stage1 model (SwinIR) for general image restoration. | [download](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_swinir_v1.ckpt) | [download](https://pan.baidu.com/s/1uvSvJgcoL_Knj0h22-9TvA?pwd=v3v6) (pwd: v3v6) |
 | general_full_v1.ckpt | Full model for general image restoration. "Full" means it contains both the stage1 and stage2 model. | [download](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_full_v1.ckpt) | [download](https://pan.baidu.com/s/1gLvW1nvkJStdVAKROqaYaA?pwd=86zi) (pwd: 86zi) |
