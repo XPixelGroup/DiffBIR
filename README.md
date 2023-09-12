@@ -90,7 +90,7 @@ pip install -r requirements.txt
 
 Download [general_full_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_full_v1.ckpt) and [general_swinir_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_swinir_v1.ckpt) to `weights/`, then run the following command to interact with the gradio website.
 
-```
+```shell
 python gradio_diffbir.py \
 --ckpt weights/general_full_v1.ckpt \
 --config configs/model/cldm.yaml \
@@ -113,7 +113,7 @@ Download [general_full_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/ma
 
 ```shell
 python inference.py \
---input inputs/general \
+--input inputs/demo/general \
 --config configs/model/cldm.yaml \
 --ckpt weights/general_full_v1.ckpt \
 --reload_swinir --swinir_ckpt weights/general_swinir_v1.ckpt \
@@ -121,7 +121,7 @@ python inference.py \
 --sr_scale 4 \
 --image_size 512 \
 --color_fix_type wavelet --resize_back \
---output results/general \
+--output results/demo/general \
 --device cuda
 ```
 
@@ -135,12 +135,12 @@ Download [face_full_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/
 python inference_face.py \
 --config configs/model/cldm.yaml \
 --ckpt weights/face_full_v1.ckpt \
---input inputs/face/aligned \
+--input inputs/demo/face/aligned \
 --steps 50 \
 --sr_scale 1 \
 --image_size 512 \
 --color_fix_type wavelet \
---output results/face/aligned --resize_back \
+--output results/demo/face/aligned --resize_back \
 --has_aligned \
 --device cuda
 
@@ -148,14 +148,35 @@ python inference_face.py \
 python inference_face.py \
 --config configs/model/cldm.yaml \
 --ckpt weights/face_full_v1.ckpt \
---input inputs/face/whole_img \
+--input inputs/demo/face/whole_img \
 --steps 50 \
 --sr_scale 1 \
 --image_size 512 \
 --color_fix_type wavelet \
---output results/face/whole_img --resize_back \
+--output results/demo/face/whole_img --resize_back \
 --device cuda
 ```
+
+### Latent Image Guidance (Quality-fidelity trade-off)
+
+Latent image guidance is used to achieve a trade-off bwtween quality and fidelity. We default to closing it since we prefer quality rather than fidelity. Here is an example:
+
+```shell
+python inference.py \
+--input inputs/demo/general \
+--config configs/model/cldm.yaml \
+--ckpt weights/general_full_v1.ckpt \
+--reload_swinir --swinir_ckpt weights/general_swinir_v1.ckpt \
+--steps 50 \
+--sr_scale 4 \
+--image_size 512 \
+--color_fix_type wavelet --resize_back \
+--output results/demo/general \
+--device cuda \
+--use_guidance --g_scale 400 --g_t_start 200
+```
+
+You will see that the results become more smooth.
 
 ### Only Stage1 Model (Remove Degradations)
 
@@ -275,15 +296,16 @@ For face image restoration, we adopt the degradation model used in [DifFace](htt
 - **2023.08.30**: Repo is released.
 - **2023.09.06**: Update [colab demo](https://colab.research.google.com/github/camenduru/DiffBIR-colab/blob/main/DiffBIR_colab.ipynb). Thanks to [camenduru](https://github.com/camenduru)!:hugs:
 - **2023.09.08**: Add support for restoring unaligned faces.
+- **2023.09.12**: Upload inference code of latent image guidance and release [real47](inputs/real47) testset.
 
 ##  <a name="todo"></a>:climbing:TODO
 
 - [x] Release code and pretrained models:computer:.
 - [x] Update links to paper and project page:link:.
-- [ ] Release real47 testset:minidisc:.
-- [ ] Reduce the memory usage of DiffBIR:smiley_cat:.
-- [ ] Provide HuggingFace demo:notebook:.
-- [ ] Upload inference code of latent image guidance:page_facing_up:.
+- [x] Release real47 testset:minidisc:.
+- [ ] Provide webui and reduce the memory usage of DiffBIR:fire::fire::fire:.
+- [ ] Provide HuggingFace demo:notebook::fire::fire::fire:.
+- [x] Upload inference code of latent image guidance:page_facing_up:.
 - [ ] Improve the performance:superhero:.
 - [ ] Add a patch-based sampling schedule:mag:.
 

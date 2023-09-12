@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 import os
 import math
 from argparse import ArgumentParser, Namespace
@@ -14,6 +14,7 @@ from ldm.xformers_state import disable_xformers
 from model.spaced_sampler import SpacedSampler
 from model.ddim_sampler import DDIMSampler
 from model.cldm import ControlLDM
+from model.cond_fn import MSEGuidance
 from utils.image import (
     wavelet_reconstruction, adaptive_instance_normalization, auto_resize, pad
 )
@@ -29,7 +30,8 @@ def process(
     steps: int,
     strength: float,
     color_fix_type: str,
-    disable_preprocess_model: bool
+    disable_preprocess_model: bool,
+    cond_fn: Optional[MSEGuidance]
 ) -> Tuple[List[np.ndarray], List[np.ndarray]]:
     """
     Apply DiffBIR model on a list of low-quality images.
@@ -62,6 +64,11 @@ def process(
     elif disable_preprocess_model and not hasattr(model, "preprocess_model"):
         raise ValueError(f"model doesn't have a preprocess model.")
     
+    # load latent image guidance
+    if cond_fn is not None:
+        print("load target of cond_fn")
+        cond_fn.load_target((control * 2 - 1).float().clone())
+    
     height, width = control.size(-2), control.size(-1)
     cond = {
         "c_latent": [model.apply_condition_encoder(control)],
@@ -76,7 +83,7 @@ def process(
             steps, shape, cond,
             unconditional_guidance_scale=1.0,
             unconditional_conditioning=None,
-            cond_fn=None, x_T=x_T
+            cond_fn=cond_fn, x_T=x_T
         )
     else:
         sampler: DDIMSampler
@@ -108,8 +115,9 @@ def process(
 def parse_args() -> Namespace:
     parser = ArgumentParser()
     
-    parser.add_argument("--ckpt", required=True, type=str)
-    parser.add_argument("--config", required=True, type=str)
+    # TODO: add help info for these options
+    parser.add_argument("--ckpt", required=True, type=str, help="full checkpoint path")
+    parser.add_argument("--config", required=True, type=str, help="model config path")
     parser.add_argument("--reload_swinir", action="store_true")
     parser.add_argument("--swinir_ckpt", type=str, default="")
     
@@ -120,6 +128,14 @@ def parse_args() -> Namespace:
     parser.add_argument("--image_size", type=int, default=512)
     parser.add_argument("--repeat_times", type=int, default=1)
     parser.add_argument("--disable_preprocess_model", action="store_true")
+    
+    # latent image guidance
+    parser.add_argument("--use_guidance", action="store_true")
+    parser.add_argument("--g_scale", type=float, default=0.0)
+    parser.add_argument("--g_t_start", type=int, default=1001)
+    parser.add_argument("--g_t_stop", type=int, default=-1)
+    parser.add_argument("--g_space", type=str, default="latent")
+    parser.add_argument("--g_repeat", type=int, default=5)
     
     parser.add_argument("--color_fix_type", type=str, default="wavelet", choices=["wavelet", "adain", "none"])
     parser.add_argument("--resize_back", action="store_true")
@@ -154,7 +170,6 @@ def main() -> None:
     assert os.path.isdir(args.input)
     
     print(f"sampling {args.steps} steps using {args.sampler} sampler")
-    # with torch.autocast(device, dtype=torch.bfloat16):
     for file_path in list_image_files(args.input, follow_links=True):
         lq = Image.open(file_path).convert("RGB")
         if args.sr_scale != 1:
@@ -177,18 +192,22 @@ def main() -> None:
                     raise RuntimeError(f"{save_path} already exist")
             os.makedirs(parent_path, exist_ok=True)
             
-            # try:
+            # initialize latent image guidance
+            if args.use_guidance:
+                cond_fn = MSEGuidance(
+                    scale=args.g_scale, t_start=args.g_t_start, t_stop=args.g_t_stop,
+                    space=args.g_space, repeat=args.g_repeat
+                )
+            else:
+                cond_fn = None
+            
             preds, stage1_preds = process(
                 model, [x], steps=args.steps, sampler=args.sampler,
                 strength=1,
                 color_fix_type=args.color_fix_type,
-                disable_preprocess_model=args.disable_preprocess_model
+                disable_preprocess_model=args.disable_preprocess_model,
+                cond_fn=cond_fn
             )
-            # except RuntimeError as e:
-            #     # Avoid cuda_out_of_memory error.
-            #     print(f"{file_path}, error: {e}")
-            #     continue
-            
             pred, stage1_pred = preds[0], stage1_preds[0]
             
             # remove padding
