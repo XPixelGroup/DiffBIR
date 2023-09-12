@@ -150,7 +150,7 @@ python inference_face.py \
 --ckpt weights/face_full_v1.ckpt \
 --input inputs/face/whole_img \
 --steps 50 \
---sr_scale 1 \
+--sr_scale 2 \
 --image_size 512 \
 --color_fix_type wavelet \
 --output results/face/whole_img --resize_back \
