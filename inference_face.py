@@ -10,7 +10,7 @@ from argparse import ArgumentParser, Namespace
 
 from facexlib.utils.face_restoration_helper import FaceRestoreHelper
 
-from ldm.xformers_state import disable_xformers
+from ldm.xformers_state import auto_xformers_status, is_xformers_available
 from model.cldm import ControlLDM
 from model.ddim_sampler import DDIMSampler
 from model.spaced_sampler import SpacedSampler
@@ -26,18 +26,19 @@ from inference import process
 def parse_args() -> Namespace:
     parser = ArgumentParser()
     # model
-    parser.add_argument("--ckpt", required=True, type=str, help='Model checkpoint.')
+    # Specify the model ckpt path, and the official model can be downloaded direclty.
+    parser.add_argument("--ckpt", type=str, help='Model checkpoint.', default='weights/face_full_v1.ckpt')
     parser.add_argument("--config", required=True, type=str, help='Model config file.')
     parser.add_argument("--reload_swinir", action="store_true")
-    parser.add_argument("--swinir_ckpt", type=str, default="")
+    parser.add_argument("--swinir_ckpt", type=str, default=None)
 
     # input and preprocessing
     parser.add_argument("--input", type=str, required=True)
     parser.add_argument("--sampler", type=str, default="ddpm", choices=["ddpm", "ddim"])
     parser.add_argument("--steps", required=True, type=int)
-    parser.add_argument("--sr_scale", type=float, default=1)
+    parser.add_argument("--sr_scale", type=float, default=2)
     parser.add_argument("--image_size", type=int, default=512)
-    parser.add_argument("--repeat_times", type=int, default=1)
+    parser.add_argument("--repeat_times", type=int, default=1, help='To generate multiple results for each input image.')
     parser.add_argument("--disable_preprocess_model", action="store_true")
 
     # face related
@@ -47,7 +48,9 @@ def parse_args() -> Namespace:
             help='Face detector. Optional: retinaface_resnet50, retinaface_mobile0.25, YOLOv5l, YOLOv5n, dlib. \
                 Default: retinaface_resnet50')
     # TODO: support diffbir background upsampler
-    # parser.add_argument('--bg_upsampler', type=str, default='None', help='Background upsampler. Optional: diffbir, realesrgan')
+    # Loading two DiffBIR models requires huge GPU memory capacity. Choose RealESRGAN as an alternative.
+    parser.add_argument('--bg_upsampler', type=str, default='RealESRGAN', choices=['DiffBIR', 'RealESRGAN'], help='Background upsampler.')
+    parser.add_argument('--bg_tile', type=int, default=400, help='Tile size for background sampler.')
     
     # postprocessing and saving
     parser.add_argument("--color_fix_type", type=str, default="wavelet", choices=["wavelet", "adain", "none"])
@@ -61,27 +64,53 @@ def parse_args() -> Namespace:
     
     return parser.parse_args()
 
+def build_diffbir_model(model_config, ckpt, swinir_ckpt=None):
+    ''''
+        model_config: model architecture config file.
+        ckpt: path of the model checkpoint file.
+    '''
+    from basicsr.utils.download_util import load_file_from_url
+    weight_root = os.path.dirname(ckpt)
+
+    # download ckpt automatically if ckpt not exist in the local path
+    if 'general_full_v1' in ckpt:
+        ckpt_url = 'https://huggingface.co/lxq007/DiffBIR/resolve/main/general_full_v1.ckpt'
+        if swinir_ckpt is None:
+            swinir_ckpt = f'{weight_root}/general_swinir_v1.ckpt'
+            swinir_url  = 'https://huggingface.co/lxq007/DiffBIR/resolve/main/general_swinir_v1.ckpt'
+    elif 'face_full_v1' in ckpt:
+        # swinir ckpt is already included in face_full_v1.ckpt
+        ckpt_url = 'https://huggingface.co/lxq007/DiffBIR/resolve/main/face_full_v1.ckpt'
+    else:
+        # define a custom diffbir model
+        raise NotImplementedError('undefined diffbir model type!')
+    
+    if not os.path.exists(ckpt):
+        ckpt = load_file_from_url(ckpt_url, weight_root)
+    if swinir_ckpt is not None and not os.path.exists(swinir_ckpt):
+        swinir_ckpt = load_file_from_url(swinir_url, weight_root)
+    
+    model: ControlLDM = instantiate_from_config(OmegaConf.load(model_config))
+    load_state_dict(model, torch.load(ckpt), strict=True)
+    # reload preprocess model if specified
+    if swinir_ckpt is not None:
+        if not hasattr(model, "preprocess_model"):
+            raise ValueError(f"model don't have a preprocess model.")
+        print(f"reload swinir model from {swinir_ckpt}")
+        load_state_dict(model.preprocess_model, torch.load(swinir_ckpt), strict=True)
+    model.freeze()
+    return model
+
 
 def main() -> None:
     args = parse_args()
     img_save_ext = 'png'
     pl.seed_everything(args.seed)
     
-    if args.device == "cpu":
-        disable_xformers()
-    
-    model: ControlLDM = instantiate_from_config(OmegaConf.load(args.config))
-    load_state_dict(model, torch.load(args.ckpt, map_location="cpu"), strict=True)
-    # reload preprocess model if specified
-    if args.reload_swinir:
-        if not hasattr(model, "preprocess_model"):
-            raise ValueError(f"model don't have a preprocess model.")
-        print(f"reload swinir model from {args.swinir_ckpt}")
-        load_state_dict(model.preprocess_model, torch.load(args.swinir_ckpt, map_location="cpu"), strict=True)
-    model.freeze()
-    model.to(args.device)
-    
     assert os.path.isdir(args.input)
+
+    auto_xformers_status(args.device)
+    model = build_diffbir_model(args.config, args.ckpt, args.swinir_ckpt).to(args.device)
 
     # ------------------ set up FaceRestoreHelper -------------------
     face_helper = FaceRestoreHelper(
@@ -91,8 +120,25 @@ def main() -> None:
         use_parse=True,
         det_model = args.detection_model
         )
-    # TODO: to support backgrouns upsampler
-    bg_upsampler = None
+
+    # set up the backgrouns upsampler
+    if args.bg_upsampler.lower() == 'diffbir':
+        # TODO: to support DiffBIR as background upsampler
+        # Loading two DiffBIR models consumes huge GPU memory capacity.
+        bg_upsampler = build_diffbir_model(args.config, 'weights/general_full_v1.pth')
+        # try:
+        bg_upsampler = bg_upsampler.to(args.device)
+        # except:
+        #     # put the bg_upsampler on cpu to avoid OOM
+        #     gpu_alternate = True
+    elif args.bg_upsampler.lower() == 'realesrgan':
+        from utils.realesrgan_utils import set_realesrgan
+        # support official RealESRGAN x2 & x4 upsample model
+        bg_upscale = int(args.sr_scale) if int(args.sr_scale) in [2, 4] else 4
+        print(f'Loading RealESRGAN_x{bg_upscale}plus.pth for background upsampling...')
+        bg_upsampler = set_realesrgan(args.bg_tile, args.device, bg_upscale)
+    else:
+        bg_upsampler = None
     
     print(f"sampling {args.steps} steps using {args.sampler} sampler")
     for file_path in list_image_files(args.input, follow_links=True):
@@ -117,14 +163,15 @@ def main() -> None:
             face_helper.align_warp_face()
 
         save_path = os.path.join(args.output, os.path.relpath(file_path, args.input))
-        parent_path, basename, _ = get_file_name_parts(save_path)
+        parent_path, img_basename, _ = get_file_name_parts(save_path)
         os.makedirs(parent_path, exist_ok=True)
         os.makedirs(os.path.join(parent_path, 'cropped_faces'), exist_ok=True)
         os.makedirs(os.path.join(parent_path, 'restored_faces'), exist_ok=True)
         os.makedirs(os.path.join(parent_path, 'restored_imgs'), exist_ok=True)
         for i in range(args.repeat_times):
+            basename =  f'{img_basename}_{i}' if i else img_basename
             restored_img_path = os.path.join(parent_path, 'restored_imgs', f'{basename}.{img_save_ext}')
-            if os.path.exists(restored_img_path):
+            if os.path.exists(restored_img_path) or os.path.exists(os.path.join(parent_path, 'restored_faces', f'{basename}.{img_save_ext}')):
                 if args.skip_if_exist:
                     print(f"Exists, skip face image {basename}...")
                     continue
@@ -136,7 +183,8 @@ def main() -> None:
                     model, face_helper.cropped_faces, steps=args.steps, sampler=args.sampler,
                     strength=1,
                     color_fix_type=args.color_fix_type,
-                    disable_preprocess_model=args.disable_preprocess_model
+                    disable_preprocess_model=args.disable_preprocess_model,
+                    cond_fn=None
                 )
             except RuntimeError as e:
                 # Avoid cuda_out_of_memory error.
@@ -152,8 +200,17 @@ def main() -> None:
             if not args.has_aligned:
                 # upsample the background
                 if bg_upsampler is not None:
-                    # TODO
-                    bg_img = None
+                    print(f'Upsampling the background image...')
+                    print('bg upsampler', bg_upsampler.device)
+                    if args.bg_upsampler.lower() == 'diffbir':
+                        bg_img, _ = process(
+                            bg_upsampler, [x], steps=args.steps, sampler=args.sampler, 
+                            color_fix_type=args.color_fix_type,
+                            strength=1, disable_preprocess_model=args.disable_preprocess_model,
+                            cond_fn=None)
+                        bg_img= bg_img[0]
+                    else:
+                        bg_img = bg_upsampler.enhance(x, outscale=args.sr_scale)[0]
                 else:
                     bg_img = None
                 face_helper.get_inverse_affine(None)
@@ -165,7 +222,6 @@ def main() -> None:
 
             # save faces
             for idx, (cropped_face, restored_face) in enumerate(zip(face_helper.cropped_faces, face_helper.restored_faces)):
-                save_path = os.path.join(parent_path, f"{basename}_{i}.{img_save_ext}")
                 # save cropped face
                 if not args.has_aligned: 
                     save_crop_path = os.path.join(parent_path, 'cropped_faces', f'{basename}_{idx:02d}.{img_save_ext}')
@@ -178,6 +234,7 @@ def main() -> None:
                 save_restore_path = os.path.join(parent_path, 'restored_faces', save_face_name)
                 Image.fromarray(restored_face).save(save_restore_path)
 
+            # save restored whole image
             if not args.has_aligned:
                 # remove padding
                 restored_img = restored_img[:lq_resized.height, :lq_resized.width, :]

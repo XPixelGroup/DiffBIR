@@ -47,11 +47,14 @@
 <!-- <summary>Face Image Restoration</summary> -->
 ### Face Image Restoration
 
-[<img src="assets/visual_results/face1.png" height="223px"/>](https://imgsli.com/MTk5ODI5) [<img src="assets/visual_results/face2.png" height="223px"/>](https://imgsli.com/MTk5ODMw) [<img src="assets/visual_results/face3.png" height="223px"/>](https://imgsli.com/MTk5ODMy)
+[<img src="assets/visual_results/face1.png" height="223px"/>](https://imgsli.com/MTk5ODI5) [<img src="assets/visual_results/face2.png" height="223px"/>](https://imgsli.com/MTk5ODMw) [<img src="assets/visual_results/face4.png" height="223px"/>](https://imgsli.com/MTk5ODM0)
 
-[<img src="assets/visual_results/face4.png" height="223px"/>](https://imgsli.com/MTk5ODM0) [<img src="assets/visual_results/face5.png" height="223px"/>](https://imgsli.com/MTk5ODM1) [<img src="assets/visual_results/face6.png" height="223px"/>](https://imgsli.com/MTk5ODM2)
+[<img src="assets/visual_results/whole_image2.png" height="268"/>](https://imgsli.com/MjA1OTU3) [<img src="assets/visual_results/whole_image3.png" height="268"/>](https://imgsli.com/MjA1OTU4)
+<!-- [<img src="assets/visual_results/face3.png" height="223px"/>](https://imgsli.com/MTk5ODMy) -->
+ <!-- [<img src="assets/visual_results/face5.png" height="223px"/>](https://imgsli.com/MTk5ODM1)  -->
 
-[<img src="assets/visual_results/whole_image1.png" height="410px"/>](https://imgsli.com/MjA0MzQw)
+[<img src="assets/visual_results/whole_image1.png" height="410"/>](https://imgsli.com/MjA1OTU5)
+
 
 <!-- </details> -->
 
@@ -62,6 +65,7 @@
 - **2023.09.08**: Add support for restoring unaligned faces.
 - **2023.09.12**: Upload inference code of latent image guidance and release [real47](inputs/real47) testset.
 - **2023.09.13**: Provide online demo (DiffBIR-official) in [OpenXLab](https://openxlab.org.cn/apps/detail/linxinqi/DiffBIR-official), which integrates both general model and face model. Please have a try! [camenduru](https://github.com/camenduru) also implements an online demo, thanks for his work.:hugs:
+- **2023.09.14**：Add support for background upsampling for face enhancement! Try it >
 
 ## <a name="todo"></a>:climbing:TODO
 
@@ -162,7 +166,10 @@ python inference_face.py \
 --output results/demo/face/aligned --resize_back \
 --has_aligned \
 --device cuda
+```
 
+<span id="unaligned_face_inference"></span>
+```
 # for unaligned face inputs
 python inference_face.py \
 --config configs/model/cldm.yaml \
@@ -173,6 +180,7 @@ python inference_face.py \
 --image_size 512 \
 --color_fix_type wavelet \
 --output results/demo/face/whole_img --resize_back \
+--bg_upsampler DiffBIR \
 --device cuda
 ```
 
