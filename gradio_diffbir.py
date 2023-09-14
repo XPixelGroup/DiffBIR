@@ -52,22 +52,26 @@ def process(
     strength: float,
     positive_prompt: str,
     negative_prompt: str,
-    cond_scale: float,
+    cfg_scale: float,
     steps: int,
     use_color_fix: bool,
     keep_original_size: bool,
-    seed: int
+    seed: int,
+    tiled: bool,
+    tile_size: int,
+    tile_stride: int
 ) -> List[np.ndarray]:
     print(
         f"control image shape={control_img.size}\n"
         f"num_samples={num_samples}, sr_scale={sr_scale}, image_size={image_size}\n"
         f"disable_preprocess_model={disable_preprocess_model}, strength={strength}\n"
         f"positive_prompt='{positive_prompt}', negative_prompt='{negative_prompt}'\n"
-        f"prompt scale={cond_scale}, steps={steps}, use_color_fix={use_color_fix}\n"
-        f"seed={seed}"
+        f"cdf scale={cfg_scale}, steps={steps}, use_color_fix={use_color_fix}\n"
+        f"seed={seed}\n"
+        f"tiled={tiled}, tile_size={tile_size}, tile_stride={tile_stride}"
     )
     pl.seed_everything(seed)
-
+    
     # prepare condition
     if sr_scale != 1:
         control_img = control_img.resize(
@@ -83,33 +87,27 @@ def process(
     control = einops.rearrange(control, "n h w c -> n c h w").contiguous()
     if not disable_preprocess_model:
         control = model.preprocess_model(control)
-    height, width = control.size(-2), control.size(-1)
-    cond = {
-        "c_latent": [model.apply_condition_encoder(control)],
-        "c_crossattn": [model.get_learned_conditioning([positive_prompt] * num_samples)]
-    }
-    uncond = {
-        "c_latent": [model.apply_condition_encoder(control)],
-        "c_crossattn": [model.get_learned_conditioning([negative_prompt] * num_samples)]
-    }
     model.control_scales = [strength] * 13
     
+    height, width = control.size(-2), control.size(-1)
     shape = (num_samples, 4, height // 8, width // 8)
-    print(f"latent shape = {shape}")
     x_T = torch.randn(shape, device=model.device, dtype=torch.float32)
-    samples = sampler.sample(
-        steps, shape, cond,
-        unconditional_guidance_scale=cond_scale,
-        unconditional_conditioning=uncond,
-        cond_fn=None, x_T=x_T
-    )
-    x_samples = model.decode_first_stage(samples)
-    x_samples = ((x_samples + 1) / 2).clamp(0, 1)
-    
-    # apply color correction
-    if use_color_fix:
-        x_samples = wavelet_reconstruction(x_samples, control)
-    
+    if not tiled:
+        samples = sampler.sample(
+            steps=steps, shape=shape, cond_img=control,
+            positive_prompt=positive_prompt, negative_prompt=negative_prompt, x_T=x_T,
+            cfg_scale=cfg_scale, cond_fn=None,
+            color_fix_type="wavelet" if use_color_fix else "none"
+        )
+    else:
+        samples = sampler.sample_with_mixdiff(
+            tile_size=int(tile_size), tile_stride=int(tile_stride),
+            steps=steps, shape=shape, cond_img=control,
+            positive_prompt=positive_prompt, negative_prompt=negative_prompt, x_T=x_T,
+            cfg_scale=cfg_scale, cond_fn=None,
+            color_fix_type="wavelet" if use_color_fix else "none"
+        )
+    x_samples = samples.clamp(0, 1)
     x_samples = (einops.rearrange(x_samples, "b c h w -> b h w c") * 255).cpu().numpy().clip(0, 255).astype(np.uint8)
     preds = []
     for img in x_samples:
@@ -132,6 +130,9 @@ with block:
             input_image = gr.Image(source="upload", type="pil")
             run_button = gr.Button(label="Run")
             with gr.Accordion("Options", open=True):
+                tiled = gr.Checkbox(label="Tiled", value=False)
+                tile_size = gr.Slider(label="Tile Size", minimum=512, maximum=1024, value=512, step=256)
+                tile_stride = gr.Slider(label="Tile Stride", minimum=256, maximum=512, value=256, step=128)
                 num_samples = gr.Slider(label="Images", minimum=1, maximum=12, value=1, step=1)
                 sr_scale = gr.Number(label="SR Scale", value=1)
                 image_size = gr.Slider(label="Image size", minimum=256, maximum=768, value=512, step=64)
@@ -146,7 +147,7 @@ with block:
                     label="Negative Prompt",
                     value="longbody, lowres, bad anatomy, bad hands, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality"
                 )
-                cond_scale = gr.Slider(label="Prompt Guidance Scale", minimum=0.1, maximum=30.0, value=1.0, step=0.1)
+                cfg_scale = gr.Slider(label="Classifier Free Guidance Scale (Set a value larger than 1 to enable it!)", minimum=0.1, maximum=30.0, value=1.0, step=0.1)
                 strength = gr.Slider(label="Control Strength", minimum=0.0, maximum=2.0, value=1.0, step=0.01)
                 steps = gr.Slider(label="Steps", minimum=1, maximum=100, value=50, step=1)
                 disable_preprocess_model = gr.Checkbox(label="Disable Preprocess Model", value=False)
@@ -164,12 +165,16 @@ with block:
         strength,
         positive_prompt,
         negative_prompt,
-        cond_scale,
+        cfg_scale,
         steps,
         use_color_fix,
         keep_original_size,
-        seed
+        seed,
+        tiled,
+        tile_size,
+        tile_stride
     ]
     run_button.click(fn=process, inputs=inputs, outputs=[result_gallery])
 
-block.launch(server_name='0.0.0.0')
+# block.launch(server_name='0.0.0.0') <= this only works for me ???
+block.launch()

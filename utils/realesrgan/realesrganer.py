@@ -6,7 +6,9 @@ import queue
 import threading
 import torch
 from torch.nn import functional as F
-from basicsr.utils.download_util import load_file_from_url
+
+from utils.file import load_file_from_url
+from utils.realesrgan.rrdbnet import RRDBNet
 
 # ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -303,7 +305,6 @@ def set_realesrgan(bg_tile, device, scale=2):
     '''
         scale: options: 2, 4. Default: 2. RealESRGAN official models only support x2 and x4 upsampling.
     '''
-    from basicsr.archs.rrdbnet_arch import RRDBNet
     assert isinstance(scale, int), 'Expected param scale to be an integer!'
 
     model = RRDBNet(

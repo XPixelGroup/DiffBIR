@@ -60,7 +60,7 @@
 
 ## <a name="update"></a>:new:Update
 
-
+- **2023.09.14**: Integrate a patch-based sampling strategy ([mixture-of-diffusion](https://github.com/albarji/mixture-of-diffusers)). [**Try it!**](#general_image_inference) Here is an [example](https://imgsli.com/MjA2MDA1) with a resolution of 2396 x 1596. GPU memory usage will continue to be optimized in the future and we are looking forward to your pull requests!
 - **2023.09.14**: Add support for background upsampler(DiffBIR/[RealESRGAN](https://github.com/xinntao/Real-ESRGAN)) in face enhancement! :rocket: [**Try it!** >](#unaligned_face_inference)
 - **2023.09.13**: Provide online demo (DiffBIR-official) in [OpenXLab](https://openxlab.org.cn/apps/detail/linxinqi/DiffBIR-official), which integrates both general model and face model. Please have a try! [camenduru](https://github.com/camenduru) also implements an online demo, thanks for his work.:hugs:
 - **2023.09.12**: Upload inference code of latent image guidance and release [real47](inputs/real47) testset.
@@ -77,17 +77,28 @@
 - [x] Release real47 testset:minidisc:.
 - [ ] Provide webui and reduce the memory usage of DiffBIR:fire::fire::fire:.
 - [ ] Provide HuggingFace demo:notebook::fire::fire::fire:.
-- [ ] Add a patch-based sampling schedule:mag:.
+- [x] Add a patch-based sampling schedule:mag:.
 - [x] Upload inference code of latent image guidance:page_facing_up:.
 - [ ] Improve the performance:superhero:.
 
 ## <a name="installation"></a>:gear:Installation
-- **Python** >= 3.9
+<!-- - **Python** >= 3.9
 - **CUDA** >= 11.3
 - **PyTorch** >= 1.12.1
-- **xformers** == 0.0.16
+- **xformers** == 0.0.16 -->
 
 ```shell
+# clone this repo
+git clone https://github.com/XPixelGroup/DiffBIR.git
+cd DiffBIR
+
+# create an environment with python >= 3.9
+conda create -n diffbir python=3.9
+conda activate diffbir
+pip install -r requirements.txt
+```
+
+<!-- ```shell
 # clone this repo
 git clone https://github.com/XPixelGroup/DiffBIR.git
 cd DiffBIR
@@ -101,7 +112,7 @@ conda install xformers==0.0.16 -c xformers
 
 # other dependencies
 pip install -r requirements.txt
-```
+``` -->
 
 ## <a name="pretrained_models"></a>:dna:Pretrained Models
 
@@ -133,6 +144,7 @@ python gradio_diffbir.py \
 
 ### Full Pipeline (Remove Degradations & Refine Details)
 
+<a name="general_image_inference"></a>
 #### General Image
 
 Download [general_full_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_full_v1.ckpt) and [general_swinir_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_swinir_v1.ckpt) to `weights/` and run the following command.
@@ -148,10 +160,10 @@ python inference.py \
 --image_size 512 \
 --color_fix_type wavelet --resize_back \
 --output results/demo/general \
---device cuda
+--device cuda [--tiled --tile_size 512 --tile_stride 256]
 ```
 
-If you are confused about where the `reload_swinir` option came from, please refer to the [degradation details](#degradation-details).
+Remove the brackets to enable tiled sampling. If you are confused about where the `reload_swinir` option came from, please refer to the [degradation details](#degradation-details).
 
 #### Face Image
 Download [face_full_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/face_full_v1.ckpt) to `weights/` and run the following command.
@@ -171,8 +183,9 @@ python inference_face.py \
 --device cuda
 ```
 
-<span id="unaligned_face_inference"></span>
-```
+<a name="unaligned_face_inference"></a>
+
+```shell
 # for unaligned face inputs
 python inference_face.py \
 --config configs/model/cldm.yaml \

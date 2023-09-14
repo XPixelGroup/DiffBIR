@@ -5,20 +5,16 @@ import numpy as np
 from PIL import Image
 from omegaconf import OmegaConf
 import pytorch_lightning as pl
-from typing import List, Tuple
 from argparse import ArgumentParser, Namespace
 
 from facexlib.utils.face_restoration_helper import FaceRestoreHelper
 
-from ldm.xformers_state import auto_xformers_status, is_xformers_available
+from ldm.xformers_state import auto_xformers_status
 from model.cldm import ControlLDM
-from model.ddim_sampler import DDIMSampler
-from model.spaced_sampler import SpacedSampler
 from utils.common import instantiate_from_config, load_state_dict
 from utils.file import list_image_files, get_file_name_parts
-from utils.image import (
-    wavelet_reconstruction, adaptive_instance_normalization, auto_resize, pad
-)
+from utils.image import auto_resize, pad
+from utils.file import load_file_from_url
 
 from inference import process
 
@@ -34,7 +30,6 @@ def parse_args() -> Namespace:
 
     # input and preprocessing
     parser.add_argument("--input", type=str, required=True)
-    parser.add_argument("--sampler", type=str, default="ddpm", choices=["ddpm", "ddim"])
     parser.add_argument("--steps", required=True, type=int)
     parser.add_argument("--sr_scale", type=float, default=2)
     parser.add_argument("--image_size", type=int, default=512)
@@ -69,7 +64,6 @@ def build_diffbir_model(model_config, ckpt, swinir_ckpt=None):
         model_config: model architecture config file.
         ckpt: path of the model checkpoint file.
     '''
-    from basicsr.utils.download_util import load_file_from_url
     weight_root = os.path.dirname(ckpt)
 
     # download ckpt automatically if ckpt not exist in the local path
@@ -132,7 +126,7 @@ def main() -> None:
         #     # put the bg_upsampler on cpu to avoid OOM
         #     gpu_alternate = True
     elif args.bg_upsampler.lower() == 'realesrgan':
-        from utils.realesrgan_utils import set_realesrgan
+        from utils.realesrgan.realesrganer import set_realesrgan
         # support official RealESRGAN x2 & x4 upsample model
         bg_upscale = int(args.sr_scale) if int(args.sr_scale) in [2, 4] else 4
         print(f'Loading RealESRGAN_x{bg_upscale}plus.pth for background upsampling...')
@@ -140,7 +134,6 @@ def main() -> None:
     else:
         bg_upsampler = None
     
-    print(f"sampling {args.steps} steps using {args.sampler} sampler")
     for file_path in list_image_files(args.input, follow_links=True):
         # read image
         lq = Image.open(file_path).convert("RGB")
@@ -180,11 +173,11 @@ def main() -> None:
             
             try:
                 preds, stage1_preds = process(
-                    model, face_helper.cropped_faces, steps=args.steps, sampler=args.sampler,
+                    model, face_helper.cropped_faces, steps=args.steps,
                     strength=1,
                     color_fix_type=args.color_fix_type,
                     disable_preprocess_model=args.disable_preprocess_model,
-                    cond_fn=None
+                    cond_fn=None, tiled=False, tile_size=None, tile_stride=None
                 )
             except RuntimeError as e:
                 # Avoid cuda_out_of_memory error.
@@ -204,10 +197,10 @@ def main() -> None:
                     print('bg upsampler', bg_upsampler.device)
                     if args.bg_upsampler.lower() == 'diffbir':
                         bg_img, _ = process(
-                            bg_upsampler, [x], steps=args.steps, sampler=args.sampler, 
+                            bg_upsampler, [x], steps=args.steps,
                             color_fix_type=args.color_fix_type,
                             strength=1, disable_preprocess_model=args.disable_preprocess_model,
-                            cond_fn=None)
+                            cond_fn=None, tiled=False, tile_size=None, tile_stride=None)
                         bg_img= bg_img[0]
                     else:
                         bg_img = bg_upsampler.enhance(x, outscale=args.sr_scale)[0]

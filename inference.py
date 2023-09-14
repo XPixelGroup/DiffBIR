@@ -12,7 +12,6 @@ from omegaconf import OmegaConf
 
 from ldm.xformers_state import disable_xformers
 from model.spaced_sampler import SpacedSampler
-from model.ddim_sampler import DDIMSampler
 from model.cldm import ControlLDM
 from model.cond_fn import MSEGuidance
 from utils.image import (
@@ -26,12 +25,14 @@ from utils.file import list_image_files, get_file_name_parts
 def process(
     model: ControlLDM,
     control_imgs: List[np.ndarray],
-    sampler: str,
     steps: int,
     strength: float,
     color_fix_type: str,
     disable_preprocess_model: bool,
-    cond_fn: Optional[MSEGuidance]
+    cond_fn: Optional[MSEGuidance],
+    tiled: bool,
+    tile_size: int,
+    tile_stride: int
 ) -> Tuple[List[np.ndarray], List[np.ndarray]]:
     """
     Apply DiffBIR model on a list of low-quality images.
@@ -39,7 +40,6 @@ def process(
     Args:
         model (ControlLDM): Model.
         control_imgs (List[np.ndarray]): A list of low-quality images (HWC, RGB, range in [0, 255])
-        sampler (str): Sampler name.
         steps (int): Sampling steps.
         strength (float): Control strength. Set to 1.0 during training.
         color_fix_type (str): Type of color correction for samples.
@@ -52,57 +52,34 @@ def process(
             as low-quality inputs.
     """
     n_samples = len(control_imgs)
-    if sampler == "ddpm":
-        sampler = SpacedSampler(model, var_type="fixed_small")
-    else:
-        sampler = DDIMSampler(model)
+    sampler = SpacedSampler(model, var_type="fixed_small")
     control = torch.tensor(np.stack(control_imgs) / 255.0, dtype=torch.float32, device=model.device).clamp_(0, 1)
     control = einops.rearrange(control, "n h w c -> n c h w").contiguous()
-    # TODO: model.preprocess_model = lambda x: x
-    if not disable_preprocess_model and hasattr(model, "preprocess_model"):
-        control = model.preprocess_model(control)
-    elif disable_preprocess_model and not hasattr(model, "preprocess_model"):
-        raise ValueError(f"model doesn't have a preprocess model.")
     
-    # load latent image guidance
-    if cond_fn is not None:
-        print("load target of cond_fn")
-        cond_fn.load_target((control * 2 - 1).float().clone())
-    
-    height, width = control.size(-2), control.size(-1)
-    cond = {
-        "c_latent": [model.apply_condition_encoder(control)],
-        "c_crossattn": [model.get_learned_conditioning([""] * n_samples)]
-    }
+    if disable_preprocess_model:
+        model.preprocess_model = lambda x: x
+    control = model.preprocess_model(control)
     model.control_scales = [strength] * 13
     
+    height, width = control.size(-2), control.size(-1)
     shape = (n_samples, 4, height // 8, width // 8)
     x_T = torch.randn(shape, device=model.device, dtype=torch.float32)
-    if isinstance(sampler, SpacedSampler):
+    if not tiled:
         samples = sampler.sample(
-            steps, shape, cond,
-            unconditional_guidance_scale=1.0,
-            unconditional_conditioning=None,
-            cond_fn=cond_fn, x_T=x_T
+            steps=steps, shape=shape, cond_img=control,
+            positive_prompt="", negative_prompt="", x_T=x_T,
+            cfg_scale=1.0, cond_fn=cond_fn,
+            color_fix_type=color_fix_type
         )
     else:
-        sampler: DDIMSampler
-        samples, _ = sampler.sample(
-            S=steps, batch_size=shape[0], shape=shape[1:],
-            conditioning=cond, unconditional_conditioning=None,
-            x_T=x_T, eta=0
+        samples = sampler.sample_with_mixdiff(
+            tile_size=tile_size, tile_stride=tile_stride,
+            steps=steps, shape=shape, cond_img=control,
+            positive_prompt="", negative_prompt="", x_T=x_T,
+            cfg_scale=1.0, cond_fn=cond_fn,
+            color_fix_type=color_fix_type
         )
-    x_samples = model.decode_first_stage(samples)
-    x_samples = ((x_samples + 1) / 2).clamp(0, 1)
-    
-    # apply color correction (borrowed from StableSR)
-    if color_fix_type == "adain":
-        x_samples = adaptive_instance_normalization(x_samples, control)
-    elif color_fix_type == "wavelet":
-        x_samples = wavelet_reconstruction(x_samples, control)
-    else:
-        assert color_fix_type == "none", f"unexpected color fix type: {color_fix_type}"
-    
+    x_samples = samples.clamp(0, 1)
     x_samples = (einops.rearrange(x_samples, "b c h w -> b h w c") * 255).cpu().numpy().clip(0, 255).astype(np.uint8)
     control = (einops.rearrange(control, "b c h w -> b h w c") * 255).cpu().numpy().clip(0, 255).astype(np.uint8)
     
@@ -122,12 +99,16 @@ def parse_args() -> Namespace:
     parser.add_argument("--swinir_ckpt", type=str, default="")
     
     parser.add_argument("--input", type=str, required=True)
-    parser.add_argument("--sampler", type=str, default="ddpm", choices=["ddpm", "ddim"])
     parser.add_argument("--steps", required=True, type=int)
     parser.add_argument("--sr_scale", type=float, default=1)
     parser.add_argument("--image_size", type=int, default=512)
     parser.add_argument("--repeat_times", type=int, default=1)
     parser.add_argument("--disable_preprocess_model", action="store_true")
+    
+    # patch-based sampling
+    parser.add_argument("--tiled", action="store_true")
+    parser.add_argument("--tile_size", type=int, default=512)
+    parser.add_argument("--tile_stride", type=int, default=256)
     
     # latent image guidance
     parser.add_argument("--use_guidance", action="store_true")
@@ -169,7 +150,6 @@ def main() -> None:
     
     assert os.path.isdir(args.input)
     
-    print(f"sampling {args.steps} steps using {args.sampler} sampler")
     for file_path in list_image_files(args.input, follow_links=True):
         lq = Image.open(file_path).convert("RGB")
         if args.sr_scale != 1:
@@ -202,11 +182,12 @@ def main() -> None:
                 cond_fn = None
             
             preds, stage1_preds = process(
-                model, [x], steps=args.steps, sampler=args.sampler,
+                model, [x], steps=args.steps,
                 strength=1,
                 color_fix_type=args.color_fix_type,
                 disable_preprocess_model=args.disable_preprocess_model,
-                cond_fn=cond_fn
+                cond_fn=cond_fn,
+                tiled=args.tiled, tile_size=args.tile_size, tile_stride=args.tile_stride
             )
             pred, stage1_pred = preds[0], stage1_preds[0]
             
