@@ -60,12 +60,15 @@
 
 ## <a name="update"></a>:new:Update
 
-- **2023.08.30**: Repo is released.
-- **2023.09.06**: Update [colab demo](https://colab.research.google.com/github/camenduru/DiffBIR-colab/blob/main/DiffBIR_colab.ipynb). Thanks to [camenduru](https://github.com/camenduru)!:hugs:
-- **2023.09.08**: Add support for restoring unaligned faces.
-- **2023.09.12**: Upload inference code of latent image guidance and release [real47](inputs/real47) testset.
+
+- **2023.09.14**：Add support for background upsampling using DiffBIR/[RealESRGAN](https://github.com/xinntao/Real-ESRGAN) in face enhancement! :rocket:[**Try it!** >](#unaligned_face_inference)
 - **2023.09.13**: Provide online demo (DiffBIR-official) in [OpenXLab](https://openxlab.org.cn/apps/detail/linxinqi/DiffBIR-official), which integrates both general model and face model. Please have a try! [camenduru](https://github.com/camenduru) also implements an online demo, thanks for his work.:hugs:
-- **2023.09.14**：Add support for background upsampling for face enhancement! Try it >
+- **2023.09.12**: Upload inference code of latent image guidance and release [real47](inputs/real47) testset.
+- **2023.09.08**: Add support for restoring unaligned faces.
+- **2023.09.06**: Update [colab demo](https://colab.research.google.com/github/camenduru/DiffBIR-colab/blob/main/DiffBIR_colab.ipynb). Thanks to [camenduru](https://github.com/camenduru)!:hugs:
+- **2023.08.30**: Repo is released.
+<!-- - [**History Updates** >]() -->
+
 
 ## <a name="todo"></a>:climbing:TODO
 
