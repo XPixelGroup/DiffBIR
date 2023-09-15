@@ -307,6 +307,12 @@ def set_realesrgan(bg_tile, device, scale=2):
     '''
     assert isinstance(scale, int), 'Expected param scale to be an integer!'
 
+    use_half = False
+    if 'cuda' in str(device): # set False in CPU/MPS mode
+        no_half_gpu_list = ['1650', '1660'] # set False for GPUs that don't support f16
+        if not True in [gpu in torch.cuda.get_device_name(0) for gpu in no_half_gpu_list]:
+            use_half = True
+
     model = RRDBNet(
         num_in_ch=3,
         num_out_ch=3,
@@ -322,6 +328,7 @@ def set_realesrgan(bg_tile, device, scale=2):
         tile=bg_tile,
         tile_pad=40,
         pre_pad=0,
-        device=device
+        device=device,
+        half=use_half
     )
     return upsampler

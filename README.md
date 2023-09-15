@@ -49,12 +49,15 @@
 
 [<img src="assets/visual_results/face1.png" height="223px"/>](https://imgsli.com/MTk5ODI5) [<img src="assets/visual_results/face2.png" height="223px"/>](https://imgsli.com/MTk5ODMw) [<img src="assets/visual_results/face4.png" height="223px"/>](https://imgsli.com/MTk5ODM0)
 
-[<img src="assets/visual_results/whole_image2.png" height="268"/>](https://imgsli.com/MjA1OTU3) [<img src="assets/visual_results/whole_image3.png" height="268"/>](https://imgsli.com/MjA1OTY2)
+[<img src="assets/visual_results/whole_image1.png" height="370"/>](https://imgsli.com/MjA2MTU0) 
+[<img src="assets/visual_results/whole_image2.png" height="370"/>](https://imgsli.com/MjA2MTQ4)
+<!-- [<img src="assets/visual_results/whole_image3.png" height="268"/>](https://imgsli.com/MjA1OTY2) -->
 <!-- [<img src="assets/visual_results/face3.png" height="223px"/>](https://imgsli.com/MTk5ODMy) -->
  <!-- [<img src="assets/visual_results/face5.png" height="223px"/>](https://imgsli.com/MTk5ODM1)  -->
 
-[<img src="assets/visual_results/whole_image1.png" height="410"/>](https://imgsli.com/MjA1OTU5)
+<!-- [<img src="assets/visual_results/whole_image1.png" height="410"/>](https://imgsli.com/MjA1OTU5) -->
 
+:star: Face and the background enhanced by DiffBIR.
 
 <!-- </details> -->
 
@@ -171,14 +174,9 @@ Download [face_full_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/
 ```shell
 # for aligned face inputs
 python inference_face.py \
---config configs/model/cldm.yaml \
---ckpt weights/face_full_v1.ckpt \
 --input inputs/demo/face/aligned \
---steps 50 \
 --sr_scale 1 \
---image_size 512 \
---color_fix_type wavelet \
---output results/demo/face/aligned --resize_back \
+--output results/demo/face/aligned \
 --has_aligned \
 --device cuda
 ```
@@ -188,14 +186,9 @@ python inference_face.py \
 ```shell
 # for unaligned face inputs
 python inference_face.py \
---config configs/model/cldm.yaml \
---ckpt weights/face_full_v1.ckpt \
 --input inputs/demo/face/whole_img \
---steps 50 \
 --sr_scale 2 \
---image_size 512 \
---color_fix_type wavelet \
---output results/demo/face/whole_img --resize_back \
+--output results/demo/face/whole_img \
 --bg_upsampler DiffBIR \
 --device cuda
 ```
