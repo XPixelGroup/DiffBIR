@@ -238,6 +238,8 @@ def main() -> None:
                 # save restored face
                 if args.has_aligned:
                     save_face_name = f'{basename}.{img_save_ext}'
+                    # remove padding
+                    restored_face = restored_face[:lq_resized.height, :lq_resized.width, :]
                 else:
                     save_face_name = f'{basename}_{idx:02d}.{img_save_ext}'
                 save_restore_path = os.path.join(parent_path, 'restored_faces', save_face_name)
