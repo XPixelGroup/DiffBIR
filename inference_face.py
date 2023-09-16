@@ -144,7 +144,7 @@ def main() -> None:
         bg_upsampler = set_realesrgan(args.bg_tile, args.device, bg_upscale)
     else:
         bg_upsampler = None
-    
+
     for file_path in list_image_files(args.input, follow_links=True):
         # read image
         lq = Image.open(file_path).convert("RGB")
@@ -167,10 +167,12 @@ def main() -> None:
             face_helper.get_face_landmarks_5(only_center_face=args.only_center_face, resize=640, eye_dist_threshold=5)
             face_helper.align_warp_face()
 
-        cropped_face_dir = os.path.join(args.output, 'cropped_faces')
-        restored_face_dir = os.path.join(args.output, 'restored_faces')
-        restored_img_dir = os.path.join(args.output, 'restored_imgs')
-        _, img_basename, _ = get_file_name_parts(file_path)
+        parent_dir, img_basename, _ = get_file_name_parts(file_path)
+        rel_parent_dir = os.path.relpath(parent_dir, args.input)
+        output_parent_dir = os.path.join(args.output, rel_parent_dir)
+        cropped_face_dir = os.path.join(output_parent_dir, 'cropped_faces')
+        restored_face_dir = os.path.join(output_parent_dir, 'restored_faces')
+        restored_img_dir = os.path.join(output_parent_dir, 'restored_imgs')
         if not args.has_aligned:
             os.makedirs(cropped_face_dir, exist_ok=True)
             os.makedirs(restored_img_dir, exist_ok=True)
@@ -252,7 +254,7 @@ def main() -> None:
                 restored_img = restored_img[:lq_resized.height, :lq_resized.width, :]
                 # save restored image
                 Image.fromarray(restored_img).resize(lq.size, Image.LANCZOS).convert("RGB").save(restored_img_path)
-            print(f"Face image {basename} saved to {args.output}")
+            print(f"Face image {basename} saved to {output_parent_dir}")
 
 
 if __name__ == "__main__":
