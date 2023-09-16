@@ -167,17 +167,18 @@ def main() -> None:
             face_helper.get_face_landmarks_5(only_center_face=args.only_center_face, resize=640, eye_dist_threshold=5)
             face_helper.align_warp_face()
 
-            os.makedirs(os.path.join(parent_path, 'cropped_faces'), exist_ok=True)
-            os.makedirs(os.path.join(parent_path, 'restored_imgs'), exist_ok=True)
-
-        save_path = os.path.join(args.output, os.path.relpath(file_path, args.input))
-        parent_path, img_basename, _ = get_file_name_parts(save_path)
-        os.makedirs(parent_path, exist_ok=True)
-        os.makedirs(os.path.join(parent_path, 'restored_faces'), exist_ok=True)
+        cropped_face_dir = os.path.join(args.output, 'cropped_faces')
+        restored_face_dir = os.path.join(args.output, 'restored_faces')
+        restored_img_dir = os.path.join(args.output, 'restored_imgs')
+        _, img_basename, _ = get_file_name_parts(file_path)
+        if not args.has_aligned:
+            os.makedirs(cropped_face_dir, exist_ok=True)
+            os.makedirs(restored_img_dir, exist_ok=True)
+        os.makedirs(restored_face_dir, exist_ok=True)
         for i in range(args.repeat_times):
             basename =  f'{img_basename}_{i}' if i else img_basename
-            restored_img_path = os.path.join(parent_path, 'restored_imgs', f'{basename}.{img_save_ext}')
-            if os.path.exists(restored_img_path) or os.path.exists(os.path.join(parent_path, 'restored_faces', f'{basename}.{img_save_ext}')):
+            restored_img_path = os.path.join(restored_img_dir, f'{basename}.{img_save_ext}')
+            if os.path.exists(restored_img_path) or os.path.exists(os.path.join(restored_face_dir, f'{basename}.{img_save_ext}')):
                 if args.skip_if_exist:
                     print(f"Exists, skip face image {basename}...")
                     continue
@@ -233,7 +234,7 @@ def main() -> None:
             for idx, (cropped_face, restored_face) in enumerate(zip(face_helper.cropped_faces, face_helper.restored_faces)):
                 # save cropped face
                 if not args.has_aligned: 
-                    save_crop_path = os.path.join(parent_path, 'cropped_faces', f'{basename}_{idx:02d}.{img_save_ext}')
+                    save_crop_path = os.path.join(cropped_face_dir, f'{basename}_{idx:02d}.{img_save_ext}')
                     Image.fromarray(cropped_face).save(save_crop_path)
                 # save restored face
                 if args.has_aligned:
@@ -242,7 +243,7 @@ def main() -> None:
                     restored_face = restored_face[:lq_resized.height, :lq_resized.width, :]
                 else:
                     save_face_name = f'{basename}_{idx:02d}.{img_save_ext}'
-                save_restore_path = os.path.join(parent_path, 'restored_faces', save_face_name)
+                save_restore_path = os.path.join(restored_face_dir, save_face_name)
                 Image.fromarray(restored_face).save(save_restore_path)
 
             # save restored whole image
@@ -251,7 +252,7 @@ def main() -> None:
                 restored_img = restored_img[:lq_resized.height, :lq_resized.width, :]
                 # save restored image
                 Image.fromarray(restored_img).resize(lq.size, Image.LANCZOS).convert("RGB").save(restored_img_path)
-            print(f"Face image {basename} saved to {parent_path}")
+            print(f"Face image {basename} saved to {args.output}")
 
 
 if __name__ == "__main__":
