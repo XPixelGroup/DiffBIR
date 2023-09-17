@@ -14,9 +14,7 @@ from ldm.xformers_state import disable_xformers
 from model.spaced_sampler import SpacedSampler
 from model.cldm import ControlLDM
 from model.cond_fn import MSEGuidance
-from utils.image import (
-    wavelet_reconstruction, adaptive_instance_normalization, auto_resize, pad
-)
+from utils.image import auto_resize, pad
 from utils.common import instantiate_from_config, load_state_dict
 from utils.file import list_image_files, get_file_name_parts
 
@@ -39,11 +37,15 @@ def process(
     
     Args:
         model (ControlLDM): Model.
-        control_imgs (List[np.ndarray]): A list of low-quality images (HWC, RGB, range in [0, 255])
+        control_imgs (List[np.ndarray]): A list of low-quality images (HWC, RGB, range in [0, 255]).
         steps (int): Sampling steps.
         strength (float): Control strength. Set to 1.0 during training.
         color_fix_type (str): Type of color correction for samples.
         disable_preprocess_model (bool): If specified, preprocess model (SwinIR) will not be used.
+        cond_fn (Guidance | None): Guidance function that returns gradient to guide the predicted x_0.
+        tiled (bool): If specified, a patch-based sampling strategy will be used for sampling.
+        tile_size (int): Size of patch.
+        tile_stride (int): Stride of sliding patch.
     
     Returns:
         preds (List[np.ndarray]): Restoration results (HWC, RGB, range in [0, 255]).
@@ -56,9 +58,8 @@ def process(
     control = torch.tensor(np.stack(control_imgs) / 255.0, dtype=torch.float32, device=model.device).clamp_(0, 1)
     control = einops.rearrange(control, "n h w c -> n c h w").contiguous()
     
-    if disable_preprocess_model:
-        model.preprocess_model = lambda x: x
-    control = model.preprocess_model(control)
+    if not disable_preprocess_model:
+        control = model.preprocess_model(control)
     model.control_scales = [strength] * 13
     
     height, width = control.size(-2), control.size(-1)
@@ -101,7 +102,6 @@ def parse_args() -> Namespace:
     parser.add_argument("--input", type=str, required=True)
     parser.add_argument("--steps", required=True, type=int)
     parser.add_argument("--sr_scale", type=float, default=1)
-    parser.add_argument("--image_size", type=int, default=512)
     parser.add_argument("--repeat_times", type=int, default=1)
     parser.add_argument("--disable_preprocess_model", action="store_true")
     
@@ -119,7 +119,6 @@ def parse_args() -> Namespace:
     parser.add_argument("--g_repeat", type=int, default=5)
     
     parser.add_argument("--color_fix_type", type=str, default="wavelet", choices=["wavelet", "adain", "none"])
-    parser.add_argument("--resize_back", action="store_true")
     parser.add_argument("--output", type=str, required=True)
     parser.add_argument("--show_lq", action="store_true")
     parser.add_argument("--skip_if_exist", action="store_true")
@@ -157,7 +156,10 @@ def main() -> None:
                 tuple(math.ceil(x * args.sr_scale) for x in lq.size),
                 Image.BICUBIC
             )
-        lq_resized = auto_resize(lq, args.image_size)
+        if not args.tiled:
+            lq_resized = auto_resize(lq, 512)
+        else:
+            lq_resized = auto_resize(lq, args.tile_size)
         x = pad(np.array(lq_resized), scale=64)
         
         for i in range(args.repeat_times):
@@ -196,20 +198,13 @@ def main() -> None:
             stage1_pred = stage1_pred[:lq_resized.height, :lq_resized.width, :]
             
             if args.show_lq:
-                if args.resize_back:
-                    if lq_resized.size != lq.size:
-                        pred = np.array(Image.fromarray(pred).resize(lq.size, Image.LANCZOS))
-                        stage1_pred = np.array(Image.fromarray(stage1_pred).resize(lq.size, Image.LANCZOS))
-                    lq = np.array(lq)
-                else:
-                    lq = np.array(lq_resized)
+                pred = np.array(Image.fromarray(pred).resize(lq.size, Image.LANCZOS))
+                stage1_pred = np.array(Image.fromarray(stage1_pred).resize(lq.size, Image.LANCZOS))
+                lq = np.array(lq)
                 images = [lq, pred] if args.disable_preprocess_model else [lq, stage1_pred, pred]
                 Image.fromarray(np.concatenate(images, axis=1)).save(save_path)
             else:
-                if args.resize_back and lq_resized.size != lq.size:
-                    Image.fromarray(pred).resize(lq.size, Image.LANCZOS).save(save_path)
-                else:
-                    Image.fromarray(pred).save(save_path)
+                Image.fromarray(pred).resize(lq.size, Image.LANCZOS).save(save_path)
             print(f"save to {save_path}")
 
 if __name__ == "__main__":

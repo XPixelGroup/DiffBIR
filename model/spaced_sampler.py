@@ -444,11 +444,11 @@ class SpacedSampler:
                 # predict noise for this tile
                 tile_noise = self.predict_noise(tile_img, ts, tile_cond, cfg_scale, tile_uncond)
                 
-                # accumulate mean and variance
+                # accumulate noise
                 noise_buffer[:, :, hi:hi_end, wi:wi_end] += tile_noise
                 count[:, :, hi:hi_end, wi:wi_end] += 1
             
-            # average on noise
+            # average on noise (score)
             noise_buffer.div_(count)
             # sample previous latent
             pred_x0 = self._predict_xstart_from_eps(x_t=img, t=index, eps=noise_buffer)
