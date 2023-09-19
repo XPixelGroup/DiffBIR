@@ -1,7 +1,6 @@
 --extra-index-url https://download.pytorch.org/whl/cu116
 torch==1.13.1+cu116
 torchvision==0.14.1+cu116
-torchaudio==0.13.1
 xformers==0.0.16
 pytorch_lightning==1.4.2
 einops
