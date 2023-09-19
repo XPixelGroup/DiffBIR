@@ -83,6 +83,7 @@
 - [x] Add a patch-based sampling schedule:mag:.
 - [x] Upload inference code of latent image guidance:page_facing_up:.
 - [ ] Improve the performance:superhero:.
+- [ ] Support MPS acceleration for MacOS users.
 
 ## <a name="installation"></a>:gear:Installation
 <!-- - **Python** >= 3.9
@@ -100,6 +101,8 @@ conda create -n diffbir python=3.9
 conda activate diffbir
 pip install -r requirements.txt
 ```
+
+Note the installation is only compatiable with **Linux** users. If you are working on different platforms, please check [xOS Installation](assets/docs/installation_xOS.md).
 
 <!-- ```shell
 # clone this repo
