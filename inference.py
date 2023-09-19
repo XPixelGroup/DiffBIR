@@ -62,6 +62,9 @@ def process(
         control = model.preprocess_model(control)
     model.control_scales = [strength] * 13
     
+    if cond_fn is not None:
+        cond_fn.load_target(2 * control - 1)
+    
     height, width = control.size(-2), control.size(-1)
     shape = (n_samples, 4, height // 8, width // 8)
     x_T = torch.randn(shape, device=model.device, dtype=torch.float32)

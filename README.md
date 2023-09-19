@@ -160,8 +160,7 @@ python inference.py \
 --reload_swinir --swinir_ckpt weights/general_swinir_v1.ckpt \
 --steps 50 \
 --sr_scale 4 \
---image_size 512 \
---color_fix_type wavelet --resize_back \
+--color_fix_type wavelet \
 --output results/demo/general \
 --device cuda [--tiled --tile_size 512 --tile_stride 256]
 ```
@@ -205,8 +204,7 @@ python inference.py \
 --reload_swinir --swinir_ckpt weights/general_swinir_v1.ckpt \
 --steps 50 \
 --sr_scale 4 \
---image_size 512 \
---color_fix_type wavelet --resize_back \
+--color_fix_type wavelet \
 --output results/demo/general \
 --device cuda \
 --use_guidance --g_scale 400 --g_t_start 200
@@ -238,9 +236,9 @@ Since the proposed two-stage pipeline is very flexible, you can utilize other aw
 python inference.py \
 --config configs/model/cldm.yaml \
 --ckpt [full_ckpt_path] \
---steps 50 --sr_scale 1 --image_size 512 \
+--steps 50 --sr_scale 1 \
 --input [img_dir_path] \
---color_fix_type wavelet --resize_back \
+--color_fix_type wavelet \
 --output [output_dir_path] \
 --disable_preprocess_model \
 --device cuda
