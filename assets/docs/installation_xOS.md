@@ -8,7 +8,7 @@ You can choose to run on **CPU** without `xformers` and `triton` installed.
 To use **CUDA**, please refer to [issue#24](https://github.com/XPixelGroup/DiffBIR/issues/24) to try solve the problem of `triton` installation.
 
 # MacOS
-<!-- Currenly only CPU device is supported to run DiffBIR on Apple Silicon since most GPU acceleration packages are compatiable with CUDA only. 
+<!-- Currenly only CPU device is supported to run DiffBIR on Apple Silicon since most GPU acceleration packages are compatible with CUDA only. 
 
 We are still trying to support MPS device. Stay tuned for our progress! -->
 

@@ -78,7 +78,7 @@ def _extract_into_tensor(arr, timesteps, broadcast_shape):
         # float64 as default. float64 is not supported by mps device.
         res = torch.from_numpy(arr).to(device=timesteps.device)[timesteps].float()
     except:
-        # to be compatiable with mps
+        # to be compatible with mps
         res = torch.from_numpy(arr.astype(np.float32)).to(device=timesteps.device)[timesteps].float()
         
     while len(res.shape) < len(broadcast_shape):

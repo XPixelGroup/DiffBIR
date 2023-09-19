@@ -103,7 +103,7 @@ conda activate diffbir
 pip install -r requirements.txt
 ```
 
-Note the installation is only compatiable with **Linux** users. If you are working on different platforms, please check [xOS Installation](assets/docs/installation_xOS.md).
+Note the installation is only compatible with **Linux** users. If you are working on different platforms, please check [xOS Installation](assets/docs/installation_xOS.md).
 
 <!-- ```shell
 # clone this repo
