@@ -313,6 +313,11 @@ def set_realesrgan(bg_tile, device, scale=2):
         if not True in [gpu in torch.cuda.get_device_name(0) for gpu in no_half_gpu_list]:
             use_half = True
 
+    model_url = {
+        2: 'https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth',
+        4: 'https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth'
+    }
+
     model = RRDBNet(
         num_in_ch=3,
         num_out_ch=3,
@@ -323,7 +328,7 @@ def set_realesrgan(bg_tile, device, scale=2):
     )
     upsampler = RealESRGANer(
         scale=scale,
-        model_path=f"https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x{scale}plus.pth",
+        model_path=model_url[scale],
         model=model,
         tile=bg_tile,
         tile_pad=40,
