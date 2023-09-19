@@ -63,13 +63,14 @@
 
 ## <a name="update"></a>:new:Update
 
-- **2023.09.14**: Integrate a patch-based sampling strategy ([mixture-of-diffusers](https://github.com/albarji/mixture-of-diffusers)). [**Try it!**](#general_image_inference) Here is an [example](https://imgsli.com/MjA2MDA1) with a resolution of 2396 x 1596. GPU memory usage will continue to be optimized in the future and we are looking forward to your pull requests!
-- **2023.09.14**: Add support for background upsampler(DiffBIR/[RealESRGAN](https://github.com/xinntao/Real-ESRGAN)) in face enhancement! :rocket: [**Try it!** >](#unaligned_face_inference)
-- **2023.09.13**: Provide online demo (DiffBIR-official) in [OpenXLab](https://openxlab.org.cn/apps/detail/linxinqi/DiffBIR-official), which integrates both general model and face model. Please have a try! [camenduru](https://github.com/camenduru) also implements an online demo, thanks for his work.:hugs:
-- **2023.09.12**: Upload inference code of latent image guidance and release [real47](inputs/real47) testset.
-- **2023.09.08**: Add support for restoring unaligned faces.
-- **2023.09.06**: Update [colab demo](https://colab.research.google.com/github/camenduru/DiffBIR-colab/blob/main/DiffBIR_colab.ipynb). Thanks to [camenduru](https://github.com/camenduru)!:hugs:
-- **2023.08.30**: Repo is released.
+- **2023.09.19**: ✅ Add support to inference on **MPS/CPU** device for Apple Silicon! Check [installation_xOS.md](assets/docs/installation_xOS.md).
+- **2023.09.14**: ✅ Integrate a patch-based sampling strategy ([mixture-of-diffusers](https://github.com/albarji/mixture-of-diffusers)). [**Try it!**](#general_image_inference) Here is an [example](https://imgsli.com/MjA2MDA1) with a resolution of 2396 x 1596. GPU memory usage will continue to be optimized in the future and we are looking forward to your pull requests!
+- **2023.09.14**: ✅ Add support for background upsampler(DiffBIR/[RealESRGAN](https://github.com/xinntao/Real-ESRGAN)) in face enhancement! :rocket: [**Try it!** >](#unaligned_face_inference)
+- **2023.09.13**: :rocket: Provide online demo (DiffBIR-official) in [OpenXLab](https://openxlab.org.cn/apps/detail/linxinqi/DiffBIR-official), which integrates both general model and face model. Please have a try! [camenduru](https://github.com/camenduru) also implements an online demo, thanks for his work.:hugs:
+- **2023.09.12**: ✅ Upload inference code of latent image guidance and release [real47](inputs/real47) testset.
+- **2023.09.08**: ✅ Add support for restoring unaligned faces.
+- **2023.09.06**: :rocket: Update [colab demo](https://colab.research.google.com/github/camenduru/DiffBIR-colab/blob/main/DiffBIR_colab.ipynb). Thanks to [camenduru](https://github.com/camenduru)!:hugs:
+- **2023.08.30**: This repo is released.
 <!-- - [**History Updates** >]() -->
 
 
@@ -83,7 +84,7 @@
 - [x] Add a patch-based sampling schedule:mag:.
 - [x] Upload inference code of latent image guidance:page_facing_up:.
 - [ ] Improve the performance:superhero:.
-- [ ] Support MPS acceleration for MacOS users.
+- [x] Support MPS acceleration for MacOS users.
 
 ## <a name="installation"></a>:gear:Installation
 <!-- - **Python** >= 3.9
@@ -171,7 +172,8 @@ python inference.py \
 Remove the brackets to enable tiled sampling. If you are confused about where the `reload_swinir` option came from, please refer to the [degradation details](#degradation-details).
 
 #### Face Image
-Download [face_full_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/face_full_v1.ckpt) to `weights/` and run the following command.
+<!-- Download [face_full_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/face_full_v1.ckpt) to `weights/` and run the following command. -->
+<!-- The model can be downloaded from the internet automatically. -->
 
 ```shell
 # for aligned face inputs

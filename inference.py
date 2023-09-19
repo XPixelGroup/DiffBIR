@@ -127,17 +127,39 @@ def parse_args() -> Namespace:
     parser.add_argument("--skip_if_exist", action="store_true")
     
     parser.add_argument("--seed", type=int, default=231)
-    parser.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda"])
+    parser.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda", "mps"])
     
     return parser.parse_args()
 
+def check_device(device):
+    if device == "cuda":
+        # check if CUDA is available
+        if not torch.cuda.is_available():
+            print("CUDA not available because the current PyTorch install was not "
+                "built with CUDA enabled.")
+            device = "cpu"
+    else:
+        # xformers only support CUDA. Disable xformers when using cpu or mps.
+        disable_xformers()
+        if device == "mps":
+            # check if MPS is available
+            if not torch.backends.mps.is_available():
+                if not torch.backends.mps.is_built():
+                    print("MPS not available because the current PyTorch install was not "
+                        "built with MPS enabled.")
+                    device = "cpu"
+                else:
+                    print("MPS not available because the current MacOS version is not 12.3+ "
+                        "and/or you do not have an MPS-enabled device on this machine.")
+                    device = "cpu"
+    print(f'using device {device}')
+    return device
 
 def main() -> None:
     args = parse_args()
     pl.seed_everything(args.seed)
     
-    if args.device == "cpu":
-        disable_xformers()
+    args.device = check_device(args.device)
     
     model: ControlLDM = instantiate_from_config(OmegaConf.load(args.config))
     load_state_dict(model, torch.load(args.ckpt, map_location="cpu"), strict=True)

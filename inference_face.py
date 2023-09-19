@@ -15,7 +15,7 @@ from utils.image import auto_resize, pad
 from utils.file import load_file_from_url
 from utils.face_restoration_helper import FaceRestoreHelper
 
-from inference import process
+from inference import process, check_device
 
 pretrained_models = {
     'general_v1': {
@@ -54,7 +54,9 @@ def parse_args() -> Namespace:
 
     # Loading two DiffBIR models requires huge GPU memory capacity. Choose RealESRGAN as an alternative.
     parser.add_argument('--bg_upsampler', type=str, default='RealESRGAN', choices=['DiffBIR', 'RealESRGAN'], help='Background upsampler.')
+    # TODO: support tiled for DiffBIR background upsampler
     parser.add_argument('--bg_tile', type=int, default=400, help='Tile size for background sampler.')
+    parser.add_argument('--bg_tile_stride', type=int, default=200, help='Tile stride for background sampler.')
     
     # postprocessing and saving
     parser.add_argument("--color_fix_type", type=str, default="wavelet", choices=["wavelet", "adain", "none"])
@@ -64,8 +66,7 @@ def parse_args() -> Namespace:
     
     # change seed to finte-tune your restored images! just specify another random number.
     parser.add_argument("--seed", type=int, default=231)
-    # TODO: support mps device for MacOS devices
-    parser.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda"])
+    parser.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda", "mps"])
     
     return parser.parse_args()
 
@@ -115,7 +116,7 @@ def main() -> None:
     
     assert os.path.isdir(args.input)
 
-    auto_xformers_status(args.device)
+    args.device = check_device(args.device)
     model = build_diffbir_model(args.config, args.ckpt, args.swinir_ckpt).to(args.device)
 
     # ------------------ set up FaceRestoreHelper -------------------
@@ -131,15 +132,12 @@ def main() -> None:
     if args.bg_upsampler == 'DiffBIR':
         # Loading two DiffBIR models consumes huge GPU memory capacity.
         bg_upsampler = build_diffbir_model(args.config, 'weights/general_full_v1.pth')
-        # try:
         bg_upsampler = bg_upsampler.to(args.device)
-        # except:
-        #     # put the bg_upsampler on cpu to avoid OOM
-        #     gpu_alternate = True
     elif args.bg_upsampler == 'RealESRGAN':
         from utils.realesrgan.realesrganer import set_realesrgan
-        # support official RealESRGAN x2 & x4 upsample model
-        bg_upscale = int(args.sr_scale) if int(args.sr_scale) in [2, 4] else 4
+        # support official RealESRGAN x2 & x4 upsample model.
+        # Using x2 upsampler as default if scale is not specified as 4.
+        bg_upscale = int(args.sr_scale) if int(args.sr_scale) in [2, 4] else 2
         print(f'Loading RealESRGAN_x{bg_upscale}plus.pth for background upsampling...')
         bg_upsampler = set_realesrgan(args.bg_tile, args.device, bg_upscale)
     else:

@@ -8,53 +8,44 @@ You can choose to run on **CPU** without `xformers` and `triton` installed.
 To use **CUDA**, please refer to [issue#24](https://github.com/XPixelGroup/DiffBIR/issues/24) to try solve the problem of `triton` installation.
 
 # MacOS
-Currenly only CPU device is supported to run DiffBIR on Apple Silicon since most GPU acceleration packages are compatiable with CUDA only. 
+<!-- Currenly only CPU device is supported to run DiffBIR on Apple Silicon since most GPU acceleration packages are compatiable with CUDA only. 
 
-We are still trying to support MPS device. Stay tuned for our progress!
+We are still trying to support MPS device. Stay tuned for our progress! -->
 
-You can try to set up according to the following steps.
+You can try to set up according to the following steps to use CPU or MPS device.
 
-1. Install **torch** according to the [official document](https://pytorch.org/get-started/locally/).
+1. Install **torch (Preview/Nighly version)**.
 
-```bash
-pip install torch torchvision
-```
+    ```bash
+    # MPS acceleration is available on MacOS 12.3+
+    pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
+    ```
+    Check more details in [official document](https://pytorch.org/get-started/locally/).
 
-2. Package `triton` and `xformers` is not needed since they work with CUDA.
+2. Package `triton` and `xformers` is not needed since they work with CUDA. Remove the related packages. 
 
-Remove torch & cuda related packages. Your requirements.txt looks like:
-```bash
-# requirements.txt
-pytorch_lightning==1.4.2
-einops
-open-clip-torch
-omegaconf
-torchmetrics==0.6.0
-opencv-python-headless
-scipy
-matplotlib
-lpips
-gradio
-chardet
-transformers
-facexlib
-```
+    Your requirements.txt should look like:
+    ```bash
+    # requirements.txt
+    pytorch_lightning==1.4.2
+    einops
+    open-clip-torch
+    omegaconf
+    torchmetrics==0.6.0
+    opencv-python-headless
+    scipy
+    matplotlib
+    lpips
+    gradio
+    chardet
+    transformers
+    facexlib
+    ```
 
-```bash
-pip install -r requirements.txt
-```
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-3. Run the inference script using CPU. Ensure you've downloaded the model weights.
-```bash
-python inference.py \
---input inputs/demo/general \
---config configs/model/cldm.yaml \
---ckpt weights/general_full_v1.ckpt \
---reload_swinir --swinir_ckpt weights/general_swinir_v1.ckpt \
---steps 50 \
---sr_scale 4 \
---image_size 512 \
---color_fix_type wavelet --resize_back \
---output results/demo/general \
---device cpu
-```
+3. [Run the inference script](https://github.com/XPixelGroup/DiffBIR#general_image_inference) and specify `--device cpu` or `--device mps`. Using MPS can accelarate your inference.
+
+    You can specify `--tiled` and related arguments to avoid OOM. 
