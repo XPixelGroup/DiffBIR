@@ -9,3 +9,5 @@ __pycache__
 /temp
 /results
 .ipynb_checkpoints/
+/TODO.txt
+/deprecated

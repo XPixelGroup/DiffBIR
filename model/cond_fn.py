@@ -34,7 +34,7 @@ class Guidance:
         self.space = space
         self.repeat = repeat
     
-    def load_target(self, target: torch.Tensor) -> torch.Tensor:
+    def load_target(self, target: torch.Tensor) -> None:
         self.target = target
 
     def __call__(self, target_x0: torch.Tensor, pred_x0: torch.Tensor, t: int) -> Optional[torch.Tensor]:

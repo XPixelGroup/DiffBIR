@@ -1,142 +1,30 @@
-from typing import List, Tuple, Optional
 import os
-import math
+from typing import Optional, overload, Generator
 from argparse import ArgumentParser, Namespace
 
 import numpy as np
 import torch
-import einops
 import pytorch_lightning as pl
 from PIL import Image
 from omegaconf import OmegaConf
+from torch import nn
 
 from ldm.xformers_state import disable_xformers
-from model.spaced_sampler import SpacedSampler
-from model.cldm import ControlLDM
-from model.cond_fn import MSEGuidance
-from utils.image import auto_resize, pad
+from model.cond_fn import Guidance, MSEGuidance
 from utils.common import instantiate_from_config, load_state_dict
-from utils.file import list_image_files, get_file_name_parts
+from model.pipeline import BSRPipeline, BFRPipeline, BIDPipeline
+from utils.file import load_file_from_url
+from utils.face_restoration_helper import FaceRestoreHelper
 
 
-@torch.no_grad()
-def process(
-    model: ControlLDM,
-    control_imgs: List[np.ndarray],
-    steps: int,
-    strength: float,
-    color_fix_type: str,
-    disable_preprocess_model: bool,
-    cond_fn: Optional[MSEGuidance],
-    tiled: bool,
-    tile_size: int,
-    tile_stride: int
-) -> Tuple[List[np.ndarray], List[np.ndarray]]:
-    """
-    Apply DiffBIR model on a list of low-quality images.
-    
-    Args:
-        model (ControlLDM): Model.
-        control_imgs (List[np.ndarray]): A list of low-quality images (HWC, RGB, range in [0, 255]).
-        steps (int): Sampling steps.
-        strength (float): Control strength. Set to 1.0 during training.
-        color_fix_type (str): Type of color correction for samples.
-        disable_preprocess_model (bool): If specified, preprocess model (SwinIR) will not be used.
-        cond_fn (Guidance | None): Guidance function that returns gradient to guide the predicted x_0.
-        tiled (bool): If specified, a patch-based sampling strategy will be used for sampling.
-        tile_size (int): Size of patch.
-        tile_stride (int): Stride of sliding patch.
-    
-    Returns:
-        preds (List[np.ndarray]): Restoration results (HWC, RGB, range in [0, 255]).
-        stage1_preds (List[np.ndarray]): Outputs of preprocess model (HWC, RGB, range in [0, 255]). 
-            If `disable_preprocess_model` is specified, then preprocess model's outputs is the same 
-            as low-quality inputs.
-    """
-    n_samples = len(control_imgs)
-    sampler = SpacedSampler(model, var_type="fixed_small")
-    control = torch.tensor(np.stack(control_imgs) / 255.0, dtype=torch.float32, device=model.device).clamp_(0, 1)
-    control = einops.rearrange(control, "n h w c -> n c h w").contiguous()
-    
-    if not disable_preprocess_model:
-        control = model.preprocess_model(control)
-    model.control_scales = [strength] * 13
-    
-    if cond_fn is not None:
-        cond_fn.load_target(2 * control - 1)
-    
-    height, width = control.size(-2), control.size(-1)
-    shape = (n_samples, 4, height // 8, width // 8)
-    x_T = torch.randn(shape, device=model.device, dtype=torch.float32)
-    if not tiled:
-        samples = sampler.sample(
-            steps=steps, shape=shape, cond_img=control,
-            positive_prompt="", negative_prompt="", x_T=x_T,
-            cfg_scale=1.0, cond_fn=cond_fn,
-            color_fix_type=color_fix_type
-        )
-    else:
-        samples = sampler.sample_with_mixdiff(
-            tile_size=tile_size, tile_stride=tile_stride,
-            steps=steps, shape=shape, cond_img=control,
-            positive_prompt="", negative_prompt="", x_T=x_T,
-            cfg_scale=1.0, cond_fn=cond_fn,
-            color_fix_type=color_fix_type
-        )
-    x_samples = samples.clamp(0, 1)
-    x_samples = (einops.rearrange(x_samples, "b c h w -> b h w c") * 255).cpu().numpy().clip(0, 255).astype(np.uint8)
-    control = (einops.rearrange(control, "b c h w -> b h w c") * 255).cpu().numpy().clip(0, 255).astype(np.uint8)
-    
-    preds = [x_samples[i] for i in range(n_samples)]
-    stage1_preds = [control[i] for i in range(n_samples)]
-    
-    return preds, stage1_preds
-
-
-def parse_args() -> Namespace:
-    parser = ArgumentParser()
-    
-    # TODO: add help info for these options
-    parser.add_argument("--ckpt", required=True, type=str, help="full checkpoint path")
-    parser.add_argument("--config", required=True, type=str, help="model config path")
-    parser.add_argument("--reload_swinir", action="store_true")
-    parser.add_argument("--swinir_ckpt", type=str, default="")
-    
-    parser.add_argument("--input", type=str, required=True)
-    parser.add_argument("--steps", required=True, type=int)
-    parser.add_argument("--sr_scale", type=float, default=1)
-    parser.add_argument("--repeat_times", type=int, default=1)
-    parser.add_argument("--disable_preprocess_model", action="store_true")
-    
-    # patch-based sampling
-    parser.add_argument("--tiled", action="store_true")
-    parser.add_argument("--tile_size", type=int, default=512)
-    parser.add_argument("--tile_stride", type=int, default=256)
-    
-    # latent image guidance
-    parser.add_argument("--use_guidance", action="store_true")
-    parser.add_argument("--g_scale", type=float, default=0.0)
-    parser.add_argument("--g_t_start", type=int, default=1001)
-    parser.add_argument("--g_t_stop", type=int, default=-1)
-    parser.add_argument("--g_space", type=str, default="latent")
-    parser.add_argument("--g_repeat", type=int, default=5)
-    
-    parser.add_argument("--color_fix_type", type=str, default="wavelet", choices=["wavelet", "adain", "none"])
-    parser.add_argument("--output", type=str, required=True)
-    parser.add_argument("--show_lq", action="store_true")
-    parser.add_argument("--skip_if_exist", action="store_true")
-    
-    parser.add_argument("--seed", type=int, default=231)
-    parser.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda", "mps"])
-    
-    return parser.parse_args()
-
-def check_device(device):
+def check_device(device: str) -> str:
     if device == "cuda":
         # check if CUDA is available
         if not torch.cuda.is_available():
-            print("CUDA not available because the current PyTorch install was not "
-                "built with CUDA enabled.")
+            print(
+                "CUDA not available because the current PyTorch install was not "
+                "built with CUDA enabled."
+            )
             device = "cpu"
     else:
         # xformers only support CUDA. Disable xformers when using cpu or mps.
@@ -145,92 +33,301 @@ def check_device(device):
             # check if MPS is available
             if not torch.backends.mps.is_available():
                 if not torch.backends.mps.is_built():
-                    print("MPS not available because the current PyTorch install was not "
-                        "built with MPS enabled.")
+                    print(
+                        "MPS not available because the current PyTorch install was not "
+                        "built with MPS enabled."
+                    )
                     device = "cpu"
                 else:
-                    print("MPS not available because the current MacOS version is not 12.3+ "
-                        "and/or you do not have an MPS-enabled device on this machine.")
+                    print(
+                        "MPS not available because the current MacOS version is not 12.3+ "
+                        "and/or you do not have an MPS-enabled device on this machine."
+                    )
                     device = "cpu"
-    print(f'using device {device}')
+    print(f"using device {device}")
     return device
 
-def main() -> None:
+
+def load_model(config_path: str, ckpt_path: str, ckpt_url: Optional[str]=None, save_dir: str="weights") -> nn.Module:
+    print(f"load model config file and instantiate: {config_path}")
+    config = OmegaConf.load(config_path)
+    model = instantiate_from_config(config)
+    if not os.path.exists(ckpt_path):
+        print(f"download {ckpt_path}")
+        ckpt_path = load_file_from_url(ckpt_url, save_dir)
+    print(f"load state dict from {ckpt_path}")
+    load_state_dict(model, torch.load(ckpt_path), strict=True)
+    return model
+
+
+def build_cond_fn(args: Namespace) -> Optional[Guidance]:
+    if not args.use_guidance:
+        return None
+    if args.g_loss == "mse":
+        return MSEGuidance(
+            scale=args.g_scale, t_start=args.g_t_start, t_stop=args.g_t_stop,
+            space=args.g_space, repeat=args.g_repeat
+        )
+    else:
+        raise ValueError(args.g_loss)
+
+
+def image_resize(image: np.ndarray, scale: float) -> np.ndarray:
+    return np.array(
+        Image.fromarray(image).resize(tuple(int(x * scale) for x in image.shape[1::-1]), Image.BICUBIC)
+    )
+
+
+class InferenceLoop:
+
+    def __init__(self, args: Namespace) -> "InferenceLoop":
+        self.args = args
+        self.build_pipeline()
+        self.loop_context = {}
+    
+    @overload
+    def build_pipeline(self) -> None:
+        ...
+
+    def get_lq_generator(self) -> Generator:
+        img_exts = [".png", ".jpg", ".jpeg"]
+        file_names = sorted([
+            file_name for file_name in os.listdir(self.args.input) if os.path.splitext(file_name)[-1] in img_exts
+        ])
+        
+        def _generator() -> np.ndarray:
+            for file_name in file_names:
+                # save current file name for `save_iamge`
+                self.loop_context["file_stem"] = os.path.splitext(file_name)[0]
+                file_path = os.path.join(self.args.input, file_name)
+
+                image = np.array(Image.open(file_path).convert("RGB"))
+                for i in range(self.args.n_samples):
+                    # save repeat index for `save_iamge`
+                    self.loop_context["repeat_idx"] = i
+                    yield image
+        
+        return _generator
+    
+    @overload
+    def restore_image(self, image: np.ndarray) -> np.ndarray:
+        ...
+
+    def save_image(self, sample: np.ndarray) -> None:
+        file_stem, repeat_idx = self.loop_context["file_stem"], self.loop_context["repeat_idx"]
+        file_name = f"{file_stem}_{repeat_idx}.png" if self.args.n_samples >= 1 else f"{file_stem}.png"
+        file_path = os.path.join(self.args.output, file_name)
+        Image.fromarray(sample).save(file_path)
+        print(f"save result to {file_path}")
+
+    def setup(self) -> None:
+        self.output_dir = self.args.output
+        os.makedirs(self.output_dir, exist_ok=True)
+
+    @torch.no_grad()
+    def run(self) -> None:
+        self.setup()
+        # process image one by one, batch processing is not necessary
+        generator = self.get_lq_generator()
+        for image in generator():
+            if self.args.autocast:
+                print("enable autocast")
+            with torch.autocast(device_type="cuda", enabled=self.args.autocast):
+                start = torch.cuda.Event(enable_timing=True)
+                end = torch.cuda.Event(enable_timing=True)
+                start.record()
+                sample = self.restore_image(image)
+                end.record()
+                torch.cuda.synchronize()
+                print(f"time cost: {(start.elapsed_time(end)) / 1000:.5f} seconds")
+                allocated = torch.cuda.max_memory_allocated()
+                print(f"max allocated VRAM: {allocated / 1e6:.5f} MB")
+                self.save_image(sample)
+
+
+class BSRInferenceLoop(InferenceLoop):
+
+    def build_pipeline(self) -> None:
+        bsrnet = load_model("configs/model/bsrnet.yaml", "weights/bsrnet.ckpt").to(self.args.device).eval()
+        controller = load_model("configs/model/cldm.yaml", "weights/controller.ckpt").to(self.args.device).eval()
+        cond_fn = build_cond_fn(self.args)
+        self.pipeline = BSRPipeline(bsrnet, controller, cond_fn, upsample_scale=self.args.upsample_scale)
+
+    def restore_image(self, image: np.ndarray) -> np.ndarray:
+        output = self.pipeline.run(
+            image[None], steps=self.args.steps, strength=1.0, color_fix_type=self.args.color_fix_type,
+            tiled=self.args.tiled, tile_size=self.args.tile_size, tile_stride=self.args.tile_stride,
+            disable_preprocessor=self.args.disable_preprocess_model,
+            negative_prompt=self.args.negative_prompt, cfg_scale=self.args.cfg_scale
+        )
+        return output["samples"][0]
+
+
+class BIDInferenceLoop(InferenceLoop):
+
+    def build_pipeline(self) -> None:
+        scunet = load_model("configs/model/scunet.yaml", "weights/scunet_psnr.ckpt").to(self.args.device).eval()
+        controller = load_model("configs/model/cldm.yaml", "weights/controller.ckpt").to(self.args.device).eval()
+        cond_fn = build_cond_fn(self.args)
+        self.pipeline = BIDPipeline(scunet, controller, cond_fn)
+
+    def restore_image(self, image: np.ndarray) -> np.ndarray:
+        output = self.pipeline.run(
+            image[None], steps=self.args.steps, strength=1.0, color_fix_type=self.args.color_fix_type,
+            tiled=self.args.tiled, tile_size=self.args.tile_size, tile_stride=self.args.tile_stride,
+            disable_preprocessor=self.args.disable_preprocess_model,
+            negative_prompt=self.args.negative_prompt, cfg_scale=self.args.cfg_scale
+        )
+        return output["samples"][0]
+
+
+class BFRInferenceLoop(InferenceLoop):
+    
+    def build_pipeline(self) -> None:
+        swinir = load_model("configs/model/swinir.yaml", "weights/swinir.ckpt").to(self.args.device).eval()
+        controller = load_model("configs/model/cldm.yaml", "weights/controller.ckpt").to(self.args.device).eval()
+        cond_fn = build_cond_fn(self.args)
+        self.pipeline = BFRPipeline(swinir, controller, cond_fn)
+
+    def restore_image(self, image: np.ndarray) -> np.ndarray:
+        output = self.pipeline.run(
+            image[None], steps=self.args.steps, strength=1.0, color_fix_type=self.args.color_fix_type,
+            tiled=self.args.tiled, tile_size=self.args.tile_size, tile_stride=self.args.tile_stride,
+            disable_preprocessor=self.args.disable_preprocess_model,
+            negative_prompt=self.args.negative_prompt, cfg_scale=self.args.cfg_scale
+        )
+        return output["samples"][0]
+
+
+class UnAlignedBFRInferenceLoop(InferenceLoop):
+
+    def build_pipeline(self) -> None:
+        bsrnet = load_model("configs/model/bsrnet.yaml", "weights/bsrnet.ckpt").to(self.args.device).eval()
+        swinir = load_model("configs/model/swinir.yaml", "weights/swinir.ckpt").to(self.args.device).eval()
+        controller = load_model("configs/model/cldm.yaml", "weights/controller.ckpt").to(self.args.device).eval()
+        cond_fn = build_cond_fn(self.args)
+        self.bsr_pipeline = BSRPipeline(bsrnet, controller, cond_fn, upsample_scale=self.args.upsample_scale)
+        self.bfr_pipeline = BFRPipeline(swinir, controller, cond_fn)
+    
+    def get_lq_generator(self) -> Generator:
+        base_generator = super().get_lq_generator()
+        self.face_helper = FaceRestoreHelper(
+            device=self.args.device,
+            upscale_factor=1,
+            face_size=512,
+            use_parse=True,
+            det_model="retinaface_resnet50"
+        )
+        
+        def _generator() -> np.ndarray:
+            for image in base_generator():
+                self.face_helper.clean_all()
+                upsampled_bg = image_resize(image, self.args.upsample_scale)
+                self.face_helper.read_image(upsampled_bg)
+                # get face landmarks for each face
+                self.face_helper.get_face_landmarks_5(resize=640, eye_dist_threshold=5)
+                self.face_helper.align_warp_face()
+                # restore cropped face images
+                print(f"detect {len(self.face_helper.cropped_faces)} faces")
+                for i, face_image in enumerate(self.face_helper.cropped_faces):
+                    self.loop_context["face_idx"] = i
+                    self.loop_context["is_face"] = True
+                    self.loop_context["cropped_face"] = face_image
+                    yield face_image
+                # restore background
+                self.loop_context["is_face"] = False
+                yield image
+        
+        return _generator
+
+    def setup(self) -> None:
+        super().setup()
+        self.cropped_face_dir = os.path.join(self.args.output, "cropped_faces")
+        os.makedirs(self.cropped_face_dir, exist_ok=True)
+        self.restored_face_dir = os.path.join(self.args.output, "restored_faces")
+        os.makedirs(self.restored_face_dir, exist_ok=True)
+        self.restored_bg_dir = os.path.join(self.args.output, "restored_backgrounds")
+        os.makedirs(self.restored_bg_dir, exist_ok=True)
+
+    def save_image(self, sample: np.ndarray) -> None:
+        file_stem, repeat_idx = self.loop_context["file_stem"], self.loop_context["repeat_idx"]
+        if self.loop_context["is_face"]:
+            face_idx = self.loop_context["face_idx"]
+            file_name = f"{file_stem}_{repeat_idx}_face_{face_idx}.png"
+            Image.fromarray(sample).save(os.path.join(self.restored_face_dir, file_name))
+
+            cropped_face = self.loop_context["cropped_face"]
+            Image.fromarray(cropped_face).save(os.path.join(self.cropped_face_dir, file_name))
+
+            self.face_helper.add_restored_face(sample)
+        else:
+            self.face_helper.get_inverse_affine()
+            # paste each restored face to the input image
+            restored_img = self.face_helper.paste_faces_to_input_image(
+                upsample_img=sample
+            )
+            file_name = f"{file_stem}_{repeat_idx}.png"
+            Image.fromarray(sample).save(os.path.join(self.restored_bg_dir, file_name))
+            Image.fromarray(restored_img).save(os.path.join(self.output_dir, file_name))
+
+    def restore_image(self, image: np.ndarray) -> np.ndarray:
+        pipeline = self.bfr_pipeline if self.loop_context["is_face"] else self.bsr_pipeline
+        output = pipeline.run(
+            image[None], steps=self.args.steps, strength=1.0, color_fix_type=self.args.color_fix_type,
+            tiled=self.args.tiled, tile_size=self.args.tile_size, tile_stride=self.args.tile_stride,
+            disable_preprocessor=self.args.disable_preprocess_model,
+            negative_prompt=self.args.negative_prompt, cfg_scale=self.args.cfg_scale
+        )
+        return output["samples"][0]
+
+
+def parse_args() -> Namespace:
+    parser = ArgumentParser()
+    
+    # model parameters
+    parser.add_argument("--task", type=str, required=True, choices=["sr", "dn", "fr", "fr_bg"])
+    parser.add_argument("--upsample_scale", type=float, required=True)
+    parser.add_argument("--version", type=str, default="v2")
+    parser.add_argument("--disable_preprocess_model", action="store_true")
+    parser.add_argument("--negative_prompt", type=str, default="low quality, blurry, low-resolution, noisy, unsharp, weird textures")
+    parser.add_argument("--cfg_scale", type=float, default=4.0)
+    # sampling parameters
+    parser.add_argument("--steps", type=int, default=50)
+    parser.add_argument("--tiled", action="store_true")
+    parser.add_argument("--tile_size", type=int, default=512)
+    parser.add_argument("--tile_stride", type=int, default=256)
+    # input parameters
+    parser.add_argument("--input", type=str, required=True)
+    parser.add_argument("--n_samples", type=int, default=1) # repeat_times
+    # guidance parameters
+    parser.add_argument("--use_guidance", action="store_true")
+    parser.add_argument("--g_loss", type=str, default="mse", choices=["mse"])
+    parser.add_argument("--g_scale", type=float, default=0.0)
+    parser.add_argument("--g_t_start", type=int, default=1001)
+    parser.add_argument("--g_t_stop", type=int, default=-1)
+    parser.add_argument("--g_space", type=str, default="latent")
+    parser.add_argument("--g_repeat", type=int, default=5)
+    # output parameters
+    parser.add_argument("--color_fix_type", type=str, default="wavelet", choices=["wavelet", "adain", "none"])
+    parser.add_argument("--output", type=str, required=True)
+    # common parameters
+    parser.add_argument("--seed", type=int, default=231)
+    parser.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda", "mps"])
+    parser.add_argument("--autocast", action="store_true")
+    return parser.parse_args()
+
+
+def main():
     args = parse_args()
     pl.seed_everything(args.seed)
     
-    args.device = check_device(args.device)
-    
-    model: ControlLDM = instantiate_from_config(OmegaConf.load(args.config))
-    load_state_dict(model, torch.load(args.ckpt, map_location="cpu"), strict=True)
-    # reload preprocess model if specified
-    if args.reload_swinir:
-        if not hasattr(model, "preprocess_model"):
-            raise ValueError(f"model don't have a preprocess model.")
-        print(f"reload swinir model from {args.swinir_ckpt}")
-        load_state_dict(model.preprocess_model, torch.load(args.swinir_ckpt, map_location="cpu"), strict=True)
-    model.freeze()
-    model.to(args.device)
-    
-    assert os.path.isdir(args.input)
-    
-    for file_path in list_image_files(args.input, follow_links=True):
-        lq = Image.open(file_path).convert("RGB")
-        if args.sr_scale != 1:
-            lq = lq.resize(
-                tuple(math.ceil(x * args.sr_scale) for x in lq.size),
-                Image.BICUBIC
-            )
-        if not args.tiled:
-            lq_resized = auto_resize(lq, 512)
-        else:
-            lq_resized = auto_resize(lq, args.tile_size)
-        x = pad(np.array(lq_resized), scale=64)
-        
-        for i in range(args.repeat_times):
-            save_path = os.path.join(args.output, os.path.relpath(file_path, args.input))
-            parent_path, stem, _ = get_file_name_parts(save_path)
-            save_path = os.path.join(parent_path, f"{stem}_{i}.png")
-            if os.path.exists(save_path):
-                if args.skip_if_exist:
-                    print(f"skip {save_path}")
-                    continue
-                else:
-                    raise RuntimeError(f"{save_path} already exist")
-            os.makedirs(parent_path, exist_ok=True)
-            
-            # initialize latent image guidance
-            if args.use_guidance:
-                cond_fn = MSEGuidance(
-                    scale=args.g_scale, t_start=args.g_t_start, t_stop=args.g_t_stop,
-                    space=args.g_space, repeat=args.g_repeat
-                )
-            else:
-                cond_fn = None
-            
-            preds, stage1_preds = process(
-                model, [x], steps=args.steps,
-                strength=1,
-                color_fix_type=args.color_fix_type,
-                disable_preprocess_model=args.disable_preprocess_model,
-                cond_fn=cond_fn,
-                tiled=args.tiled, tile_size=args.tile_size, tile_stride=args.tile_stride
-            )
-            pred, stage1_pred = preds[0], stage1_preds[0]
-            
-            # remove padding
-            pred = pred[:lq_resized.height, :lq_resized.width, :]
-            stage1_pred = stage1_pred[:lq_resized.height, :lq_resized.width, :]
-            
-            if args.show_lq:
-                pred = np.array(Image.fromarray(pred).resize(lq.size, Image.LANCZOS))
-                stage1_pred = np.array(Image.fromarray(stage1_pred).resize(lq.size, Image.LANCZOS))
-                lq = np.array(lq)
-                images = [lq, pred] if args.disable_preprocess_model else [lq, stage1_pred, pred]
-                Image.fromarray(np.concatenate(images, axis=1)).save(save_path)
-            else:
-                Image.fromarray(pred).resize(lq.size, Image.LANCZOS).save(save_path)
-            print(f"save to {save_path}")
+    {
+        "sr": BSRInferenceLoop,
+        "dn": BIDInferenceLoop,
+        "fr": BFRInferenceLoop,
+        "fr_bg": UnAlignedBFRInferenceLoop
+    }[args.task](args).run()
+
 
 if __name__ == "__main__":
     main()
