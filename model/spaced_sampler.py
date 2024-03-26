@@ -521,6 +521,8 @@ class SpacedSampler:
         total_steps = len(self.timesteps)
         iterator = tqdm(time_range, desc="Spaced Sampler", total=total_steps)
         
+        allocated = torch.cuda.max_memory_allocated()
+        print(f"max allocated VRAM (before condition encoder): {allocated / 1e6:.5f} MB")
         cond = {
             "c_latent": [self.model.apply_condition_encoder(cond_img)],
             "c_crossattn": [self.model.get_learned_conditioning([positive_prompt] * b)]
@@ -529,6 +531,8 @@ class SpacedSampler:
             "c_latent": [self.model.apply_condition_encoder(cond_img)],
             "c_crossattn": [self.model.get_learned_conditioning([negative_prompt] * b)]
         }
+        allocated = torch.cuda.max_memory_allocated()
+        print(f"max allocated VRAM (before denoising process): {allocated / 1e6:.5f} MB")
         for i, step in enumerate(iterator):
             ts = torch.full((b,), step, device=device, dtype=torch.long)
             index = torch.full_like(ts, fill_value=total_steps - i - 1)

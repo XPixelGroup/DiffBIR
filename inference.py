@@ -9,12 +9,12 @@ from PIL import Image
 from omegaconf import OmegaConf
 from torch import nn
 
-from ldm.xformers_state import disable_xformers
 from model.cond_fn import Guidance, MSEGuidance
 from utils.common import instantiate_from_config, load_state_dict
-from model.pipeline import BSRPipeline, BFRPipeline, BIDPipeline
+from model.pipeline import BSRPipeline, BFRPipeline, BIDPipeline, Pipeline
 from utils.file import load_file_from_url
 from utils.face_restoration_helper import FaceRestoreHelper
+from model.hacked_cldm import OptimizationFlag, hack_everything
 
 
 def check_device(device: str) -> str:
@@ -28,7 +28,7 @@ def check_device(device: str) -> str:
             device = "cpu"
     else:
         # xformers only support CUDA. Disable xformers when using cpu or mps.
-        disable_xformers()
+        # disable_xformers()
         if device == "mps":
             # check if MPS is available
             if not torch.backends.mps.is_available():
@@ -56,7 +56,7 @@ def load_model(config_path: str, ckpt_path: str, ckpt_url: Optional[str]=None, s
         print(f"download {ckpt_path}")
         ckpt_path = load_file_from_url(ckpt_url, save_dir)
     print(f"load state dict from {ckpt_path}")
-    load_state_dict(model, torch.load(ckpt_path), strict=True)
+    load_state_dict(model, torch.load(ckpt_path, map_location="cpu"), strict=True)
     return model
 
 
@@ -82,6 +82,7 @@ class InferenceLoop:
 
     def __init__(self, args: Namespace) -> "InferenceLoop":
         self.args = args
+        self.pipeline: Pipeline = None
         self.build_pipeline()
         self.loop_context = {}
     
@@ -126,20 +127,14 @@ class InferenceLoop:
 
     @torch.no_grad()
     def run(self) -> None:
+        if OptimizationFlag.is_fp16_enabled():
+            self.pipeline.controller.to_fp16()
         self.setup()
         # process image one by one, batch processing is not necessary
         generator = self.get_lq_generator()
         for image in generator():
-            if self.args.autocast:
-                print("enable autocast")
-            with torch.autocast(device_type="cuda", enabled=self.args.autocast):
-                start = torch.cuda.Event(enable_timing=True)
-                end = torch.cuda.Event(enable_timing=True)
-                start.record()
+            with torch.autocast(device_type="cuda", enabled=OptimizationFlag.is_autocast_enabled()):
                 sample = self.restore_image(image)
-                end.record()
-                torch.cuda.synchronize()
-                print(f"time cost: {(start.elapsed_time(end)) / 1000:.5f} seconds")
                 allocated = torch.cuda.max_memory_allocated()
                 print(f"max allocated VRAM: {allocated / 1e6:.5f} MB")
                 self.save_image(sample)
@@ -157,7 +152,7 @@ class BSRInferenceLoop(InferenceLoop):
         output = self.pipeline.run(
             image[None], steps=self.args.steps, strength=1.0, color_fix_type=self.args.color_fix_type,
             tiled=self.args.tiled, tile_size=self.args.tile_size, tile_stride=self.args.tile_stride,
-            disable_preprocessor=self.args.disable_preprocess_model,
+            disable_preprocessor=self.args.disable_preprocess_model, positive_prompt="",
             negative_prompt=self.args.negative_prompt, cfg_scale=self.args.cfg_scale
         )
         return output["samples"][0]
@@ -175,7 +170,7 @@ class BIDInferenceLoop(InferenceLoop):
         output = self.pipeline.run(
             image[None], steps=self.args.steps, strength=1.0, color_fix_type=self.args.color_fix_type,
             tiled=self.args.tiled, tile_size=self.args.tile_size, tile_stride=self.args.tile_stride,
-            disable_preprocessor=self.args.disable_preprocess_model,
+            disable_preprocessor=self.args.disable_preprocess_model, positive_prompt="",
             negative_prompt=self.args.negative_prompt, cfg_scale=self.args.cfg_scale
         )
         return output["samples"][0]
@@ -193,7 +188,7 @@ class BFRInferenceLoop(InferenceLoop):
         output = self.pipeline.run(
             image[None], steps=self.args.steps, strength=1.0, color_fix_type=self.args.color_fix_type,
             tiled=self.args.tiled, tile_size=self.args.tile_size, tile_stride=self.args.tile_stride,
-            disable_preprocessor=self.args.disable_preprocess_model,
+            disable_preprocessor=self.args.disable_preprocess_model, positive_prompt="",
             negative_prompt=self.args.negative_prompt, cfg_scale=self.args.cfg_scale
         )
         return output["samples"][0]
@@ -275,7 +270,7 @@ class UnAlignedBFRInferenceLoop(InferenceLoop):
         output = pipeline.run(
             image[None], steps=self.args.steps, strength=1.0, color_fix_type=self.args.color_fix_type,
             tiled=self.args.tiled, tile_size=self.args.tile_size, tile_stride=self.args.tile_stride,
-            disable_preprocessor=self.args.disable_preprocess_model,
+            disable_preprocessor=self.args.disable_preprocess_model, positive_prompt="",
             negative_prompt=self.args.negative_prompt, cfg_scale=self.args.cfg_scale
         )
         return output["samples"][0]
@@ -313,13 +308,41 @@ def parse_args() -> Namespace:
     # common parameters
     parser.add_argument("--seed", type=int, default=231)
     parser.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda", "mps"])
-    parser.add_argument("--autocast", action="store_true")
+    parser.add_argument("--precision", type=str, default="full", choices=["full", "half", "autocast"])
+    parser.add_argument("--xformers", action="store_true")
+    parser.add_argument("--deepcache", action="store_true")
+    parser.add_argument("--cache_block_index", type=int, default=1)
+    parser.add_argument("--cache_interval", type=int, default=10)
+    parser.add_argument("--update_cache_uniform", action="store_true")
+    parser.add_argument("--cache_pow", type=float, default=1.4)
+    parser.add_argument("--cache_center", type=int, default=15)
+    
     return parser.parse_args()
 
 
 def main():
+    hack_everything()
+    
     args = parse_args()
+    args.device = check_device(args.device)
     pl.seed_everything(args.seed)
+    # precision
+    if args.precision == "half":
+        OptimizationFlag.enable_fp16()
+    elif args.precision == "autocast":
+        OptimizationFlag.enable_autocast()
+    
+    # xformers
+    if args.xformers:
+        assert args.device == "cuda"
+        OptimizationFlag.enable_xformers()
+    
+    # deepcache
+    if args.deepcache:
+        OptimizationFlag.enable_deepcache(
+            args.cache_block_index, args.cache_interval,
+            args.update_cache_uniform, args.cache_pow, args.cache_center
+        )
     
     {
         "sr": BSRInferenceLoop,

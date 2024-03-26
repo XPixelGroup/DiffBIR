@@ -7,14 +7,14 @@ from einops import rearrange, repeat
 from typing import Optional, Any
 
 from ldm.modules.diffusionmodules.util import checkpoint
-from ldm import xformers_state
 
-# try:
-#     import xformers
-#     import xformers.ops
-#     XFORMERS_IS_AVAILBLE = True
-# except:
-#     XFORMERS_IS_AVAILBLE = False
+try:
+    import xformers
+    import xformers.ops
+    XFORMERS_IS_AVAILBLE = True
+except:
+    XFORMERS_IS_AVAILBLE = False
+
 
 # CrossAttn precision handling
 import os
@@ -231,7 +231,7 @@ class MemoryEfficientCrossAttention(nn.Module):
         )
 
         # actually compute the attention, what we cannot get enough of
-        out = xformers_state.xformers.ops.memory_efficient_attention(q, k, v, attn_bias=None, op=self.attention_op)
+        out = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=None, op=self.attention_op)
 
         if exists(mask):
             raise NotImplementedError
@@ -252,8 +252,7 @@ class BasicTransformerBlock(nn.Module):
     def __init__(self, dim, n_heads, d_head, dropout=0., context_dim=None, gated_ff=True, checkpoint=True,
                  disable_self_attn=False):
         super().__init__()
-        # attn_mode = "softmax-xformers" if XFORMERS_IS_AVAILBLE else "softmax"
-        attn_mode = "softmax-xformers" if xformers_state.is_xformers_available() else "softmax"
+        attn_mode = "softmax-xformers" if XFORMERS_IS_AVAILBLE else "softmax"
         assert attn_mode in self.ATTENTION_MODES
         attn_cls = self.ATTENTION_MODES[attn_mode]
         self.disable_self_attn = disable_self_attn

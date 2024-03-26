@@ -52,6 +52,7 @@ class Pipeline(object):
         tiled: bool,
         tile_size: int,
         tile_stride: int,
+        positive_prompt: str,
         negative_prompt: str,
         cfg_scale: float
     ) -> torch.Tensor:
@@ -77,7 +78,7 @@ class Pipeline(object):
         if not tiled:
             samples = sampler.sample(
                 steps=steps, shape=latent_shape, cond_img=padded_cond_imgs,
-                positive_prompt="", negative_prompt=negative_prompt, x_T=x_T,
+                positive_prompt=positive_prompt, negative_prompt=negative_prompt, x_T=x_T,
                 cfg_scale=cfg_scale, cond_fn=self.cond_fn,
                 color_fix_type=color_fix_type
             )
@@ -85,7 +86,7 @@ class Pipeline(object):
             samples = sampler.sample_with_mixdiff(
                 tile_size=tile_size, tile_stride=tile_stride,
                 steps=steps, shape=latent_shape, cond_img=padded_cond_imgs,
-                positive_prompt="", negative_prompt=negative_prompt, x_T=x_T,
+                positive_prompt=positive_prompt, negative_prompt=negative_prompt, x_T=x_T,
                 cfg_scale=cfg_scale, cond_fn=self.cond_fn,
                 color_fix_type=color_fix_type
             )
@@ -118,6 +119,7 @@ class Pipeline(object):
         tile_size: int,
         tile_stride: int,
         disable_preprocessor: bool,
+        positive_prompt: str,
         negative_prompt: str,
         cfg_scale: float
     ) -> Dict[str, np.ndarray]:
@@ -125,6 +127,8 @@ class Pipeline(object):
         images = (einops.rearrange(torch.tensor(images), "n h w c -> n c h w") / 255.0).float().to(self.device)
         
         # stage 1: remove degradations from lq iamges
+        allocated = torch.cuda.max_memory_allocated()
+        print(f"max allocated VRAM (before lq preprocessor): {allocated / 1e6:.5f} MB")
         if disable_preprocessor:
             cond_imgs = images
         else:
@@ -133,7 +137,7 @@ class Pipeline(object):
         # stage 2: clean images as condition for controller
         samples = self.apply_controller(
             cond_imgs, steps, strength, color_fix_type, tiled, tile_size, tile_stride,
-            negative_prompt, cfg_scale
+            positive_prompt, negative_prompt, cfg_scale
         )
         
         # return samples and condition images

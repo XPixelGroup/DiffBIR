@@ -11,3 +11,4 @@ __pycache__
 .ipynb_checkpoints/
 /TODO.txt
 /deprecated
+/temp_scripts
