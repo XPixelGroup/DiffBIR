@@ -8,7 +8,7 @@ from facexlib.detection import init_detection_model
 from facexlib.parsing import init_parsing_model
 from facexlib.utils.misc import img2tensor, imwrite
 
-from .file import load_file_from_url
+from utils.common import load_file_from_url
 
 def get_largest_face(det_faces, h, w):
 

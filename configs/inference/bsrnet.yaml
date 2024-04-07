@@ -1,0 +1,8 @@
+target: model.RRDBNet
+params:
+  in_nc: 3
+  out_nc: 3
+  nf: 64
+  nb: 23
+  gc: 32
+  sf: 4

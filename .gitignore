@@ -12,3 +12,5 @@ __pycache__
 /TODO.txt
 /deprecated
 /temp_scripts
+/.vscode
+/runs

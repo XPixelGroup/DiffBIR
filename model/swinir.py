@@ -6,20 +6,13 @@
 # Originally borrowed from DifFace (https://github.com/zsyOAOA/DifFace/blob/master/models/swinir.py)
 
 import math
-from typing import Any, Dict, Set
+from typing import Set
 
 import torch
 import torch.nn as nn
-from torch import optim
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
-import pytorch_lightning as pl
-from pytorch_lightning.utilities.types import STEP_OUTPUT
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
-from einops import rearrange
-
-from utils.metrics import calculate_psnr_pt, LPIPS
-from .mixins import ImageLoggerMixin
 
 
 class Mlp(nn.Module):
@@ -103,7 +96,9 @@ class WindowAttention(nn.Module):
         # get pair-wise relative position index for each token inside the window
         coords_h = torch.arange(self.window_size[0])
         coords_w = torch.arange(self.window_size[1])
-        coords = torch.stack(torch.meshgrid([coords_h, coords_w]))  # 2, Wh, Ww
+        # coords = torch.stack(torch.meshgrid([coords_h, coords_w]))  # 2, Wh, Ww
+        # Fix: Pass indexing="ij" to avoid warning
+        coords = torch.stack(torch.meshgrid([coords_h, coords_w], indexing="ij"))  # 2, Wh, Ww
         coords_flatten = torch.flatten(coords, 1)  # 2, Wh*Ww
         relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # 2, Wh*Ww, Wh*Ww
         relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # Wh*Ww, Wh*Ww, 2
@@ -626,7 +621,7 @@ class UpsampleOneStep(nn.Sequential):
         return flops
 
 
-class SwinIR(pl.LightningModule, ImageLoggerMixin):
+class SwinIR(nn.Module):
     r""" SwinIR
         A PyTorch impl of : `SwinIR: Image Restoration Using Swin Transformer`, based on Swin Transformer.
 
@@ -817,12 +812,6 @@ class SwinIR(pl.LightningModule, ImageLoggerMixin):
             self.conv_last = nn.Conv2d(embed_dim, num_out_ch, 3, 1, 1)
 
         self.apply(self._init_weights)
-        
-        self.hq_key = hq_key
-        self.lq_key = lq_key
-        self.learning_rate = learning_rate
-        self.weight_decay = weight_decay
-        self.lpips_metric = LPIPS(net="alex")
 
     def _init_weights(self, m: nn.Module) -> None:
         if isinstance(m, nn.Linear):
@@ -914,75 +903,3 @@ class SwinIR(pl.LightningModule, ImageLoggerMixin):
         flops += H * W * 3 * self.embed_dim * self.embed_dim
         flops += self.upsample.flops()
         return flops
-    
-    def get_loss(self, pred: torch.Tensor, label: torch.Tensor) -> torch.Tensor:
-        """
-        Compute loss between model predictions and labels.
-        
-        Args:
-            pred (torch.Tensor): Batch model predictions.
-            label (torch.Tensor): Batch labels.
-        
-        Returns:
-            loss (torch.Tensor): The loss tensor.
-        """
-        return F.mse_loss(input=pred, target=label, reduction="sum")
-    
-    def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> STEP_OUTPUT:
-        """
-        Args:
-            batch (Dict[str, torch.Tensor]): A dict contains LQ and HQ (NHWC, RGB, 
-                LQ range in [0, 1] and HQ range in [-1, 1]).
-            batch_idx (int): Index of this batch.
-        
-        Returns:
-            outputs (torch.Tensor): The loss tensor.
-        """
-        hq, lq = batch[self.hq_key], batch[self.lq_key]
-        hq = rearrange(((hq + 1) / 2).clamp_(0, 1), "n h w c -> n c h w")
-        lq = rearrange(lq, "n h w c -> n c h w")
-        pred = self(lq)
-        loss = self.get_loss(pred, hq)
-        self.log("train_loss", loss, on_step=True)
-        return loss
-    
-    def on_validation_start(self) -> None:
-        self.lpips_metric.to(self.device)
-
-    def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> None:
-        hq, lq = batch[self.hq_key], batch[self.lq_key]
-        lq = rearrange(lq, "n h w c -> n c h w")
-        pred = self(lq)
-        hq = rearrange(((hq + 1) / 2).clamp_(0, 1), "n h w c -> n c h w")
-        
-        # requiremtns for lpips model inputs:
-        # https://github.com/richzhang/PerceptualSimilarity
-        lpips = self.lpips_metric(pred, hq, normalize=True).mean()
-        self.log("val_lpips", lpips)
-        
-        pnsr = calculate_psnr_pt(pred, hq, crop_border=0).mean()
-        self.log("val_pnsr", pnsr)
-        
-        loss = self.get_loss(pred, hq)
-        self.log("val_loss", loss)
-    
-    def configure_optimizers(self) -> optim.AdamW:
-        """
-        Configure optimizer for this model.
-        
-        Returns:
-            optimizer (optim.AdamW): The optimizer for this model.
-        """
-        optimizer = optim.AdamW(
-            [p for p in self.parameters() if p.requires_grad], lr=self.learning_rate,
-            weight_decay=self.weight_decay
-        )
-        return optimizer
-
-    @torch.no_grad()
-    def log_images(self, batch: Any) -> Dict[str, torch.Tensor]:
-        hq, lq = batch[self.hq_key], batch[self.lq_key]
-        hq = rearrange(((hq + 1) / 2).clamp_(0, 1), "n h w c -> n c h w")
-        lq = rearrange(lq, "n h w c -> n c h w")
-        pred = self(lq)
-        return dict(lq=lq, pred=pred, hq=hq)

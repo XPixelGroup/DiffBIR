@@ -1,18 +1,17 @@
---extra-index-url https://download.pytorch.org/whl/cu116
-torch==1.13.1+cu116
-torchvision==0.14.1+cu116
-xformers==0.0.16
-pytorch_lightning==1.4.2
-einops
-open-clip-torch
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 omegaconf
-torchmetrics==0.6.0
-triton==2.0.0
-opencv-python-headless
+accelerate
+einops
+# opencv-python-headless
+opencv_python
 scipy
-matplotlib
+ftfy
+regex
+python-dateutil
+timm
+pytorch-lightning # only for loading pretrained sd weight
+tensorboard # for visualize tensorboard event
+protobuf==4.25.3 # for tensorboard
 lpips
-gradio
-chardet
-transformers
 facexlib
+gradio
