@@ -61,9 +61,8 @@
 [<img src="assets/visual_results/bid2.png" height="215px"/>](https://imgsli.com/MjUzNzkx)
 
 ### 8x Blind Super-Resolution With Patch-based Sampling
----
+
 > I often think of Bag End. I miss my books and my arm chair, and my garden. See, that's where I belong. That's home. --- Bilbo Baggins
----
 
 [<img src="assets/visual_results/tiled_sampling.png" height="480px"/>](https://imgsli.com/MjUzODE4)
 
