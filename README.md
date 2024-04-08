@@ -62,7 +62,7 @@
 
 ### 8x Blind Super-Resolution With Patch-based Sampling
 ---
-> I often think of Bag End. I miss my books and my arm chair, and my garden. See, that's where I belong. That's home.<br>--- Bilbo Baggins
+> I often think of Bag End. I miss my books and my arm chair, and my garden. See, that's where I belong. That's home. --- Bilbo Baggins
 ---
 
 [<img src="assets/visual_results/tiled_sampling.png" height="480px"/>](https://imgsli.com/MjUzODE4)
@@ -121,7 +121,7 @@ Here we list pretrained weight of stage 2 model (IRControlNet) and our trained S
 | v1_face.pth | IRControlNet trained on FFHQ | [download](https://huggingface.co/lxq007/DiffBIR-v2/resolve/main/v1_face.pth) | [download](https://pan.baidu.com/s/1kvM_SB1VbXjbipLxdzlI3Q?pwd=n7dx)<br>(pwd: n7dx) | [download](https://download.openxlab.org.cn/repos/file/linxinqi/DiffBIR/main?filepath=v1_face.pth&sign=45d329c9007a7d3c7d44b54cc9660c51&nonce=1712581953073) |
 | codeformer_swinir.ckpt | SwinIR trained on ImageNet-1k | [download](https://huggingface.co/lxq007/DiffBIR-v2/resolve/main/codeformer_swinir.ckpt) | [download](https://pan.baidu.com/s/176fARg2ySYtDgX2vQOeRbA?pwd=vfif)<br>(pwd: vfif) | [download](https://download.openxlab.org.cn/repos/file/linxinqi/DiffBIR/main?filepath=codeformer_swinir.ckpt&sign=d7f783f73e50bf3ac9e7d5c13612bc63&nonce=1712581967673) |
 
-During inference, we use off-the-shelf models from other papers as the stage 1 model: [BSRNet](https://github.com/cszn/BSRGAN) for BSR, [SwinIR-Face]({https://github.com/zsyOAOA/DifFace) used in DifFace for BFR, and [SCUNet-PSNR](https://github.com/cszn/SCUNet) for BID, while the trained IRControlNet remains **unchanged** for all tasks. Please check [code](utils/inference.py) for more details. Thanks for their work!
+During inference, we use off-the-shelf models from other papers as the stage 1 model: [BSRNet](https://github.com/cszn/BSRGAN) for BSR, [SwinIR-Face](https://github.com/zsyOAOA/DifFace) used in DifFace for BFR, and [SCUNet-PSNR](https://github.com/cszn/SCUNet) for BID, while the trained IRControlNet remains **unchanged** for all tasks. Please check [code](utils/inference.py) for more details. Thanks for their work!
 
 <!-- ## <a name="quick_start"></a>:flight_departure:Quick Start
 
