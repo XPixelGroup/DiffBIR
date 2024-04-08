@@ -17,14 +17,6 @@ import lpips
 from model import SwinIR
 from utils.common import instantiate_from_config
 
-# TODO:
-# (1) tensorboard logger (x)
-# (2) accumulate gradient
-# (3) rescale learning rate (?)
-# (4) reduce metrics (x)
-# (5) image log (x)
-# (6) resume from checkpoint (x)
-# (7) validation set (x)
 
 # https://github.com/XPixelGroup/BasicSR/blob/033cd6896d898fdd3dcda32e3102a792efa1b8f4/basicsr/utils/color_util.py#L186
 def rgb2ycbcr_pt(img, y_only=False):

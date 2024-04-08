@@ -3,8 +3,10 @@ from argparse import ArgumentParser, Namespace
 import torch
 
 from accelerate.utils import set_seed
-from utils.inference import BSRInferenceLoop, BFRInferenceLoop, BIDInferenceLoop, UnAlignedBFRInferenceLoop
-from model import set_attn_mode
+from utils.inference import (
+    V1InferenceLoop,
+    BSRInferenceLoop, BFRInferenceLoop, BIDInferenceLoop, UnAlignedBFRInferenceLoop
+)
 
 
 def check_device(device: str) -> str:
@@ -33,7 +35,7 @@ def parse_args() -> Namespace:
     ### model parameters
     parser.add_argument("--task", type=str, required=True, choices=["sr", "dn", "fr", "fr_bg"])
     parser.add_argument("--upscale", type=float, required=True)
-    parser.add_argument("--version", type=str, default="v2")
+    parser.add_argument("--version", type=str, default="v2", choices=["v1", "v2"])
     ### sampling parameters
     parser.add_argument("--steps", type=int, default=50)
     parser.add_argument("--better_start", action="store_true")
@@ -59,7 +61,6 @@ def parse_args() -> Namespace:
     ### common parameters
     parser.add_argument("--seed", type=int, default=231)
     parser.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda", "mps"])
-    parser.add_argument("--attn_mode", type=str, choices=["sdp", "vanilla", "xformers", "auto"], default="auto")
     
     return parser.parse_args()
 
@@ -67,17 +68,18 @@ def parse_args() -> Namespace:
 def main():
     args = parse_args()
     args.device = check_device(args.device)
-    if args.attn_mode != "auto":
-        set_attn_mode(args.attn_mode)
     set_seed(args.seed)
-    supported_tasks = {
-        "sr": BSRInferenceLoop,
-        "dn": BIDInferenceLoop,
-        "fr": BFRInferenceLoop,
-        "fr_bg": UnAlignedBFRInferenceLoop
-    }
-    supported_tasks[args.task](args).run()
-    print("done!")
+    if args.version == "v1":
+        V1InferenceLoop(args).run()
+    else:
+        supported_tasks = {
+            "sr": BSRInferenceLoop,
+            "dn": BIDInferenceLoop,
+            "fr": BFRInferenceLoop,
+            "fr_bg": UnAlignedBFRInferenceLoop
+        }
+        supported_tasks[args.task](args).run()
+        print("done!")
 
 
 if __name__ == "__main__":

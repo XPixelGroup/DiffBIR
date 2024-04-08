@@ -1,4 +1,4 @@
-from .config import set_attn_mode
+from . import config
 
 from .controlnet import ControlledUnetModel, ControlNet
 from .vae import AutoencoderKL

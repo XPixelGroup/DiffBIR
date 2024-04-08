@@ -1,0 +1,66 @@
+model:
+  swinir:
+    target: model.swinir.SwinIR
+    params:
+      img_size: 64
+      patch_size: 1
+      in_chans: 3
+      embed_dim: 180
+      depths: [6, 6, 6, 6, 6, 6, 6, 6]
+      num_heads: [6, 6, 6, 6, 6, 6, 6, 6]
+      window_size: 8
+      mlp_ratio: 2
+      sf: 8
+      img_range: 1.0
+      upsampler: "nearest+conv"
+      resi_connection: "1conv"
+      unshuffle: True
+      unshuffle_scale: 8
+
+dataset:
+  train:
+    target: dataset.codeformer.CodeformerDataset
+    params:
+      # training file list path
+      file_list: 
+      file_backend_cfg:
+        target: dataset.file_backend.HardDiskBackend
+      out_size: 512
+      crop_type: center
+      blur_kernel_size: 41
+      kernel_list: ['iso', 'aniso']
+      kernel_prob: [0.5, 0.5]
+      blur_sigma: [0.1, 12]
+      downsample_range: [1, 12]
+      noise_range: [0, 15]
+      jpeg_range: [30, 100]
+  val:
+    target: dataset.codeformer.CodeformerDataset
+    params:
+      # validation file list path
+      file_list: 
+      file_backend_cfg:
+        target: dataset.file_backend.HardDiskBackend
+      out_size: 512
+      crop_type: center
+      blur_kernel_size: 41
+      kernel_list: ['iso', 'aniso']
+      kernel_prob: [0.5, 0.5]
+      blur_sigma: [0.1, 12]
+      downsample_range: [1, 12]
+      noise_range: [0, 15]
+      jpeg_range: [30, 100]
+
+train:
+  # experiment directory path
+  exp_dir: 
+  learning_rate: 1e-4
+  # total batch size
+  batch_size: 96
+  num_workers: 
+  train_steps: 150000
+  log_every: 50
+  ckpt_every: 10000
+  image_every: 1000
+  val_every: 1000
+  resume: ~

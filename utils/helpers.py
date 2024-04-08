@@ -14,7 +14,7 @@ from model.swinir import SwinIR
 from model.scunet import SCUNet
 from utils.sampler import SpacedSampler
 from utils.cond_fn import Guidance
-from utils.common import wavelet_decomposition, wavelet_reconstruction
+from utils.common import wavelet_decomposition, wavelet_reconstruction, count_vram_usage
 
 
 def bicubic_resize(img: np.ndarray, scale: float) -> np.ndarray:
@@ -62,7 +62,7 @@ class Pipeline:
     def run_stage1(self, lq: torch.Tensor) -> torch.Tensor:
         ...
 
-    # TODO: support tiled sampling
+    @count_vram_usage
     def run_stage2(
         self,
         clean: torch.Tensor,
@@ -80,14 +80,14 @@ class Pipeline:
         bs, _, ori_h, ori_w = clean.shape
         # pad: ensure that height & width are multiples of 64
         pad_clean = pad_to_multiples_of(clean, multiple=64)
-        ### for debug
-        # from torchvision.transforms import ToPILImage
-        # ToPILImage()(pad_clean[0]).save("runs/24-04-06/different_data/pad_clean/43.png")
-        ###
         h, w = pad_clean.shape[2:]
         # prepare conditon
-        cond = self.cldm.prepare_condition(pad_clean, [pos_prompt] * bs)
-        uncond = self.cldm.prepare_condition(pad_clean, [neg_prompt] * bs)
+        if not tiled:
+            cond = self.cldm.prepare_condition(pad_clean, [pos_prompt] * bs)
+            uncond = self.cldm.prepare_condition(pad_clean, [neg_prompt] * bs)
+        else:
+            cond = self.cldm.prepare_condition_tiled(pad_clean, [pos_prompt] * bs, tile_size, tile_stride)
+            uncond = self.cldm.prepare_condition_tiled(pad_clean, [neg_prompt] * bs, tile_size, tile_stride)
         if self.cond_fn:
             self.cond_fn.load_target(pad_clean * 2 - 1)
         old_control_scales = self.cldm.control_scales
@@ -97,7 +97,10 @@ class Pipeline:
             # reverse sampling, which can prevent our model from generating noise in 
             # image background.
             _, low_freq = wavelet_decomposition(pad_clean)
-            x_0 = self.cldm.vae_encode(low_freq)
+            if not tiled:
+                x_0 = self.cldm.vae_encode(low_freq)
+            else:
+                x_0 = self.cldm.vae_encode_tiled(low_freq, tile_size, tile_stride)
             x_T = self.diffusion.q_sample(
                 x_0,
                 torch.full((bs, ), self.diffusion.num_timesteps - 1, dtype=torch.long, device=self.device),
@@ -108,15 +111,15 @@ class Pipeline:
             x_T = torch.randn((bs, 4, h // 8, w // 8), dtype=torch.float32, device=self.device)
         ### run sampler
         sampler = SpacedSampler(self.diffusion.betas)
+        z = sampler.sample(
+            model=self.cldm, device=self.device, steps=steps, batch_size=bs, x_size=(4, h // 8, w // 8),
+            cond=cond, uncond=uncond, cfg_scale=cfg_scale, x_T=x_T, progress=True,
+            progress_leave=True, cond_fn=self.cond_fn, tiled=tiled, tile_size=tile_size, tile_stride=tile_stride
+        )
         if not tiled:
-            z = sampler.sample(
-                model=self.cldm, device=self.device, steps=steps, batch_size=bs, x_size=(4, h // 8, w // 8),
-                cond=cond, uncond=uncond, cfg_scale=cfg_scale, x_T=x_T, progress=True,
-                progress_leave=True, cond_fn=self.cond_fn
-            )
+            x = self.cldm.vae_decode(z)
         else:
-            raise NotImplementedError()
-        x = self.cldm.vae_decode(z)
+            x = self.cldm.vae_decode_tiled(z, tile_size // 8, tile_stride // 8)
         ### postprocess
         self.cldm.control_scales = old_control_scales
         sample = x[:, :, :ori_h, :ori_w]
@@ -167,6 +170,7 @@ class BSRNetPipeline(Pipeline):
         h, w = lq.shape[2:]
         self.final_size = (int(h * self.upscale), int(w * self.upscale))
 
+    @count_vram_usage
     def run_stage1(self, lq: torch.Tensor) -> torch.Tensor:
         # NOTE: upscale is always set to 4 in our experiments
         clean = self.stage1_model(lq)
@@ -183,6 +187,7 @@ class SwinIRPipeline(Pipeline):
     def __init__(self, swinir: SwinIR, cldm: ControlLDM, diffusion: Diffusion, cond_fn: Optional[Guidance], device: str) -> None:
         super().__init__(swinir, cldm, diffusion, cond_fn, device)
 
+    @count_vram_usage
     def run_stage1(self, lq: torch.Tensor) -> torch.Tensor:
         # NOTE: lq size is always equal to 512 in our experiments
         # resize: ensure the input lq size is as least 512, since SwinIR is trained on 512 resolution
@@ -203,6 +208,7 @@ class SCUNetPipeline(Pipeline):
     def __init__(self, scunet: SCUNet, cldm: ControlLDM, diffusion: Diffusion, cond_fn: Optional[Guidance], device: str) -> None:
         super().__init__(scunet, cldm, diffusion, cond_fn, device)
 
+    @count_vram_usage
     def run_stage1(self, lq: torch.Tensor) -> torch.Tensor:
         clean = self.stage1_model(lq)
         if min(clean.shape[2:]) < 512:

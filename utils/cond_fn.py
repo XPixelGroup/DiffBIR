@@ -1,14 +1,13 @@
-from typing import overload, Optional, Dict, Union, Tuple
+from typing import overload, Tuple
 import torch
 from torch.nn import functional as F
-from torchvision.transforms import ToPILImage
 
 
 class Guidance:
 
     def __init__(self, scale: float, t_start: int, t_stop: int, space: str, repeat: int) -> "Guidance":
         """
-        Initialize latent image guidance.
+        Initialize restoration guidance.
 
         Args:
             scale (float): Gradient scale (denoted as `s` in our paper). The larger the gradient scale, 
@@ -17,10 +16,10 @@ class Guidance:
                 process starts from t=1000 to t=0, the `t_start` should be larger than `t_stop`.
             space (str): The data space for computing loss function (rgb or latent).
 
-        Our latent image guidance is based on [GDP](https://github.com/Fayeben/GenerativeDiffusionPrior).
+        Our restoration guidance is based on [GDP](https://github.com/Fayeben/GenerativeDiffusionPrior).
         Thanks for their work!
         """
-        self.scale = scale
+        self.scale = scale * 3000
         self.t_start = t_start
         self.t_stop = t_stop
         self.target = None

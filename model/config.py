@@ -1,3 +1,4 @@
+import os
 from typing import Optional, Literal
 from types import ModuleType
 import enum
@@ -44,14 +45,18 @@ if XFORMERS_IS_AVAILBLE:
     Config.xformers = xformers
 
 
-def set_attn_mode(attn_mode: Literal["vanilla", "sdp", "xformers"]) -> None:
-    assert attn_mode in ["vanilla", "sdp", "xformers"]
-    if attn_mode == "sdp":
+# user-specified attention mode
+ATTN_MODE = os.environ.get("ATTN_MODE", None)
+if ATTN_MODE is not None:
+    assert ATTN_MODE in ["vanilla", "sdp", "xformers"]
+    if ATTN_MODE == "sdp":
         assert SDP_IS_AVAILABLE
         Config.attn_mode = AttnMode.SDP
-    elif attn_mode == "xformers":
+    elif ATTN_MODE == "xformers":
         assert XFORMERS_IS_AVAILBLE
         Config.attn_mode = AttnMode.XFORMERS
     else:
         Config.attn_mode = AttnMode.VANILLA
-    print(f"set attn_mode to {attn_mode}")
+    print(f"set attention mode to {ATTN_MODE}")
+else:
+    print("keep default attention mode")

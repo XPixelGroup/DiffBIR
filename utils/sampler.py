@@ -8,6 +8,7 @@ from tqdm import tqdm
 from model.gaussian_diffusion import extract_into_tensor
 from model.cldm import ControlLDM
 from utils.cond_fn import Guidance
+from utils.common import sliding_windows, gaussian_weights
 
 
 # https://github.com/openai/guided-diffusion/blob/main/guided_diffusion/respace.py
@@ -227,6 +228,44 @@ class SpacedSampler(nn.Module):
         return model_output
     
     @torch.no_grad()
+    def predict_noise_tiled(
+        self,
+        model: ControlLDM,
+        x: torch.Tensor,
+        t: torch.Tensor,
+        cond: Dict[str, torch.Tensor],
+        uncond: Optional[Dict[str, torch.Tensor]],
+        cfg_scale: float,
+        tile_size: int,
+        tile_stride: int
+    ):
+        _, _, h, w = x.shape
+        tiles = tqdm(sliding_windows(h, w, tile_size // 8, tile_stride // 8), unit="tile", leave=False)
+        eps = torch.zeros_like(x)
+        count = torch.zeros_like(x, dtype=torch.float32)
+        weights = gaussian_weights(tile_size // 8, tile_size // 8)[None, None]
+        weights = torch.tensor(weights, dtype=torch.float32, device=x.device)
+        for hi, hi_end, wi, wi_end in tiles:
+            tiles.set_description(f"Process tile ({hi} {hi_end}), ({wi} {wi_end})")
+            tile_x = x[:, :, hi:hi_end, wi:wi_end]
+            tile_cond = {
+                "c_img": cond["c_img"][:, :, hi:hi_end, wi:wi_end],
+                "c_txt": cond["c_txt"]
+            }
+            if uncond:
+                tile_uncond = {
+                    "c_img": uncond["c_img"][:, :, hi:hi_end, wi:wi_end],
+                    "c_txt": uncond["c_txt"]
+                }
+            tile_eps = self.predict_noise(model, tile_x, t, tile_cond, tile_uncond, cfg_scale)
+            # accumulate noise
+            eps[:, :, hi:hi_end, wi:wi_end] += tile_eps * weights
+            count[:, :, hi:hi_end, wi:wi_end] += weights
+        # average on noise (score)
+        eps.div_(count)
+        return eps
+    
+    @torch.no_grad()
     def p_sample(
         self,
         model: ControlLDM,
@@ -236,11 +275,18 @@ class SpacedSampler(nn.Module):
         cond: Dict[str, torch.Tensor],
         uncond: Optional[Dict[str, torch.Tensor]],
         cfg_scale: float,
-        cond_fn: Optional[Guidance]
+        cond_fn: Optional[Guidance],
+        tiled: bool,
+        tile_size: int,
+        tile_stride: int
     ) -> torch.Tensor:
-        eps = self.predict_noise(model, x, t, cond, uncond, cfg_scale)
+        if tiled:
+            eps = self.predict_noise_tiled(model, x, t, cond, uncond, cfg_scale, tile_size, tile_stride)
+        else:
+            eps = self.predict_noise(model, x, t, cond, uncond, cfg_scale)
         pred_x0 = self._predict_xstart_from_eps(x, index, eps)
         if cond_fn:
+            assert not tiled, f"tiled sampling currently doesn't support guidance"
             pred_x0 = self.apply_cond_fn(model, pred_x0, t, index, cond_fn)
         model_mean, model_variance, _ = self.q_posterior_mean_variance(pred_x0, x, index)
         noise = torch.randn_like(x)
@@ -249,7 +295,7 @@ class SpacedSampler(nn.Module):
         )
         x_prev = model_mean + nonzero_mask * torch.sqrt(model_variance) * noise
         return x_prev
-    
+
     @torch.no_grad()
     def sample(
         self,
@@ -260,8 +306,11 @@ class SpacedSampler(nn.Module):
         x_size: Tuple[int],
         cond: Dict[str, torch.Tensor],
         uncond: Dict[str, torch.Tensor],
-        cfg_scale: float=1.,
+        cfg_scale: float,
         cond_fn: Optional[Guidance]=None,
+        tiled: bool=False,
+        tile_size: int=-1,
+        tile_stride: int=-1,
         x_T: Optional[torch.Tensor]=None,
         progress: bool=True,
         progress_leave: bool=True,
@@ -279,7 +328,10 @@ class SpacedSampler(nn.Module):
         for i, step in enumerate(iterator):
             ts = torch.full((batch_size,), step, device=device, dtype=torch.long)
             index = torch.full_like(ts, fill_value=total_steps - i - 1)
-            img = self.p_sample(model, img, ts, index, cond, uncond, cfg_scale, cond_fn)
+            img = self.p_sample(
+                model, img, ts, index, cond, uncond, cfg_scale, cond_fn,
+                tiled, tile_size, tile_stride
+            )
             if cond_fn and self.context["g_apply"]:
                 loss_val = self.context["g_loss"]
                 desc = f"Spaced Sampler With Guidance, Loss: {loss_val:.6f}"

@@ -1,17 +1,19 @@
-pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-omegaconf
-accelerate
-einops
-# opencv-python-headless
-opencv_python
-scipy
-ftfy
-regex
-python-dateutil
-timm
-pytorch-lightning # only for loading pretrained sd weight
-tensorboard # for visualize tensorboard event
+--extra-index-url https://download.pytorch.org/whl/cu118
+torch==2.2.2+cu118
+torchvision==0.17.2+cu118
+torchaudio==2.2.2+cu118
+omegaconf==2.3.0
+accelerate==0.28.0
+einops==0.7.0
+opencv_python==4.9.0.80
+scipy==1.12.0
+ftfy==6.2.0
+regex==2023.12.25
+python-dateutil==2.9.0.post0
+timm==0.9.16
+pytorch-lightning==2.2.1 # only for loading pretrained sd weight
+tensorboard==2.16.2 # for tensorboard event visualization
 protobuf==4.25.3 # for tensorboard
-lpips
-facexlib
-gradio
+lpips==0.1.4
+facexlib==0.3.0
+gradio==4.25.0

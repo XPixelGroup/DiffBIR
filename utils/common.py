@@ -1,4 +1,4 @@
-from typing import Mapping, Any
+from typing import Mapping, Any, Tuple, Callable
 import importlib
 import os
 from urllib.parse import urlparse
@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 import torch
 from torch import Tensor
 from torch.nn import functional as F
+import numpy as np
 
 from torch.hub import download_url_to_file, get_dir
 
@@ -106,3 +107,53 @@ def load_file_from_url(url, model_dir=None, progress=True, file_name=None):
         print(f'Downloading: "{url}" to {cached_file}\n')
         download_url_to_file(url, cached_file, hash_prefix=None, progress=progress)
     return cached_file
+
+
+def sliding_windows(h: int, w: int, tile_size: int, tile_stride: int) -> Tuple[int, int, int, int]:
+    hi_list = list(range(0, h - tile_size + 1, tile_stride))
+    if (h - tile_size) % tile_stride != 0:
+        hi_list.append(h - tile_size)
+    
+    wi_list = list(range(0, w - tile_size + 1, tile_stride))
+    if (w - tile_size) % tile_stride != 0:
+        wi_list.append(w - tile_size)
+    
+    coords = []
+    for hi in hi_list:
+        for wi in wi_list:
+            coords.append((hi, hi + tile_size, wi, wi + tile_size))
+    return coords
+
+
+# https://github.com/csslc/CCSR/blob/main/model/q_sampler.py#L503
+def gaussian_weights(tile_width: int, tile_height: int) -> np.ndarray:
+    """Generates a gaussian mask of weights for tile contributions"""
+    latent_width = tile_width
+    latent_height = tile_height
+    var = 0.01
+    midpoint = (latent_width - 1) / 2  # -1 because index goes from 0 to latent_width - 1
+    x_probs = [
+        np.exp(-(x - midpoint) * (x - midpoint) / (latent_width * latent_width) / (2 * var)) / np.sqrt(2 * np.pi * var)
+        for x in range(latent_width)]
+    midpoint = latent_height / 2
+    y_probs = [
+        np.exp(-(y - midpoint) * (y - midpoint) / (latent_height * latent_height) / (2 * var)) / np.sqrt(2 * np.pi * var)
+        for y in range(latent_height)]
+    weights = np.outer(y_probs, x_probs)
+    return weights
+
+
+COUNT_VRAM = bool(os.environ.get("COUNT_VRAM", False))
+
+def count_vram_usage(func: Callable) -> Callable:
+    if not COUNT_VRAM:
+        return func
+    
+    def wrapper(*args, **kwargs):
+        peak_before = torch.cuda.max_memory_allocated() / (1024 ** 3)
+        ret = func(*args, **kwargs)
+        torch.cuda.synchronize()
+        peak_after = torch.cuda.max_memory_allocated() / (1024 ** 3)
+        print(f"VRAM peak before {func.__name__}: {peak_before:.5f} GB, after: {peak_after:.5f} GB")
+        return ret
+    return wrapper

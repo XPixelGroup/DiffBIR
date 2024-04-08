@@ -5,7 +5,6 @@ from argparse import Namespace
 import numpy as np
 import torch
 from PIL import Image
-from einops import rearrange
 from omegaconf import OmegaConf
 
 from model.cldm import ControlLDM
@@ -13,7 +12,7 @@ from model.gaussian_diffusion import Diffusion
 from model.bsrnet import RRDBNet
 from model.scunet import SCUNet
 from model.swinir import SwinIR
-from utils.common import instantiate_from_config, load_file_from_url
+from utils.common import instantiate_from_config, load_file_from_url, count_vram_usage
 from utils.face_restoration_helper import FaceRestoreHelper
 from utils.helpers import (
     Pipeline,
@@ -24,12 +23,18 @@ from utils.cond_fn import MSEGuidance, WeightedMSEGuidance
 
 
 MODELS = {
-    "sd_v21": "https://huggingface.co/stabilityai/stable-diffusion-2-1-base/resolve/main/v2-1_512-ema-pruned.ckpt",
+    ### stage_1 model weights
     "bsrnet": "https://github.com/cszn/KAIR/releases/download/v1.0/BSRNet.pth",
-    # TODO: change the url
-    # the following checkpoint is up-to-date but we use the old version in our paper
-    "swinir_face": "https://github.com/zsyOAOA/DifFace/releases/download/V1.0/General_Face_ffhq512.pth",
-    "scunet_psnr": "https://github.com/cszn/KAIR/releases/download/v1.0/scunet_color_real_psnr.pth"
+    # the following checkpoint is up-to-date, but we use the old version in our paper
+    # "swinir_face": "https://github.com/zsyOAOA/DifFace/releases/download/V1.0/General_Face_ffhq512.pth",
+    "swinir_face": "https://huggingface.co/lxq007/DiffBIR/resolve/main/face_swinir_v1.ckpt",
+    "scunet_psnr": "https://github.com/cszn/KAIR/releases/download/v1.0/scunet_color_real_psnr.pth",
+    "swinir_general": "https://huggingface.co/lxq007/DiffBIR/resolve/main/general_swinir_v1.ckpt",
+    ### stage_2 model weights
+    "sd_v21": "https://huggingface.co/stabilityai/stable-diffusion-2-1-base/resolve/main/v2-1_512-ema-pruned.ckpt",
+    "v1_face": "https://huggingface.co/lxq007/DiffBIR-v2/resolve/main/v1_face.pth",
+    "v1_general": "https://huggingface.co/lxq007/DiffBIR-v2/resolve/main/v1_general.pth",
+    "v2": "https://huggingface.co/lxq007/DiffBIR-v2/resolve/main/v2.pth"
 }
 
 
@@ -58,6 +63,7 @@ class InferenceLoop:
     def init_stage1_model(self) -> None:
         ...
 
+    @count_vram_usage
     def init_stage2_model(self) -> None:
         ### load uent, vae, clip
         self.cldm: ControlLDM = instantiate_from_config(OmegaConf.load("configs/inference/cldm.yaml"))
@@ -65,16 +71,16 @@ class InferenceLoop:
         unused = self.cldm.load_pretrained_sd(sd)
         print(f"strictly load pretrained sd_v2.1, unused weights: {unused}")
         ### load controlnet
-        # TODO: download from url
         if self.args.version == "v1":
             if self.args.task == "fr":
-                self.cldm.load_controlnet_from_ckpt(torch.load("weights/v1_face.pth", map_location="cpu"))
+                control_sd = load_model_from_url(MODELS["v1_face"])
             elif self.args.task == "sr":
-                self.cldm.load_controlnet_from_ckpt(torch.load("weights/v1_general.pth", map_location="cpu"))
+                control_sd = load_model_from_url(MODELS["v1_general"])
             else:
                 raise ValueError(f"DiffBIR v1 doesn't support task: {self.args.task}, please use v2 by passsing '--version v2'")
         else:
-            self.cldm.load_controlnet_from_ckpt(torch.load("weights/v2.pth", map_location="cpu"))
+            control_sd = load_model_from_url(MODELS["v2"])
+        self.cldm.load_controlnet_from_ckpt(control_sd)
         print(f"strictly load controlnet weight")
         self.cldm.eval().to(self.args.device)
         ### load diffusion
@@ -106,18 +112,22 @@ class InferenceLoop:
 
     def lq_loader(self) -> Generator[np.ndarray, None, None]:
         img_exts = [".png", ".jpg", ".jpeg"]
-        file_names = sorted([
-            file_name for file_name in os.listdir(self.args.input) if os.path.splitext(file_name)[-1] in img_exts
-        ])
+        if os.path.isdir(self.args.input):
+            file_names = sorted([
+                file_name for file_name in os.listdir(self.args.input) if os.path.splitext(file_name)[-1] in img_exts
+            ])
+            file_paths = [os.path.join(self.args.input, file_name) for file_name in file_names]
+        else:
+            assert os.path.splitext(self.args.input)[-1] in img_exts
+            file_paths = [self.args.input]
 
         def _loader() -> Generator[np.ndarray, None, None]:
-            for file_name in file_names:
+            for file_path in file_paths:
                 ### load lq
-                file_path = os.path.join(self.args.input, file_name)
                 lq = np.array(Image.open(file_path).convert("RGB"))
                 print(f"load lq: {file_path}")
-                ### set context for saving
-                self.loop_ctx["file_stem"] = os.path.splitext(file_name)[0]
+                ### set context for saving results
+                self.loop_ctx["file_stem"] = os.path.splitext(os.path.basename(file_path))[0]
                 for i in range(self.args.n_samples):
                     self.loop_ctx["repeat_idx"] = i
                     yield lq
@@ -152,6 +162,7 @@ class InferenceLoop:
 
 class BSRInferenceLoop(InferenceLoop):
 
+    @count_vram_usage
     def init_stage1_model(self) -> None:
         self.bsrnet: RRDBNet = instantiate_from_config(OmegaConf.load("configs/inference/bsrnet.yaml"))
         sd = load_model_from_url(MODELS["bsrnet"])
@@ -164,6 +175,7 @@ class BSRInferenceLoop(InferenceLoop):
 
 class BFRInferenceLoop(InferenceLoop):
 
+    @count_vram_usage
     def init_stage1_model(self) -> None:
         self.swinir_face: SwinIR = instantiate_from_config(OmegaConf.load("configs/inference/swinir.yaml"))
         sd = load_model_from_url(MODELS["swinir_face"])
@@ -180,6 +192,7 @@ class BFRInferenceLoop(InferenceLoop):
 
 class BIDInferenceLoop(InferenceLoop):
 
+    @count_vram_usage
     def init_stage1_model(self) -> None:
         self.scunet_psnr: SCUNet = instantiate_from_config(OmegaConf.load("configs/inference/scunet.yaml"))
         sd = load_model_from_url(MODELS["scunet_psnr"])
@@ -187,15 +200,38 @@ class BIDInferenceLoop(InferenceLoop):
         self.scunet_psnr.eval().to(self.args.device)
 
     def init_pipeline(self) -> None:
-        self.pipeline = SwinIRPipeline(self.scunet_psnr, self.cldm, self.diffusion, self.cond_fn, self.args.device)
+        self.pipeline = SCUNetPipeline(self.scunet_psnr, self.cldm, self.diffusion, self.cond_fn, self.args.device)
 
     def after_load_lq(self, lq: np.ndarray) -> np.ndarray:
         # For BID task, super resolution is achieved by directly upscaling lq
         return bicubic_resize(lq, self.args.upscale)
 
 
+class V1InferenceLoop(InferenceLoop):
+
+    @count_vram_usage
+    def init_stage1_model(self) -> None:
+        self.swinir: SwinIR = instantiate_from_config(OmegaConf.load("configs/inference/swinir.yaml"))
+        if self.args.task == "fr":
+            sd = load_model_from_url(MODELS["swinir_face"])
+        elif self.args.task == "sr":
+            sd = load_model_from_url(MODELS["swinir_general"])
+        else:
+            raise ValueError(f"DiffBIR v1 doesn't support task: {self.args.task}, please use v2 by passsing '--version v2'")
+        self.swinir.load_state_dict(sd, strict=True)
+        self.swinir.eval().to(self.args.device)
+
+    def init_pipeline(self) -> None:
+        self.pipeline = SwinIRPipeline(self.swinir, self.cldm, self.diffusion, self.cond_fn, self.args.device)
+
+    def after_load_lq(self, lq: np.ndarray) -> np.ndarray:
+        # For BFR task, super resolution is achieved by directly upscaling lq
+        return bicubic_resize(lq, self.args.upscale)
+
+
 class UnAlignedBFRInferenceLoop(InferenceLoop):
 
+    @count_vram_usage
     def init_stage1_model(self) -> None:
         self.bsrnet: RRDBNet = instantiate_from_config(OmegaConf.load("configs/inference/bsrnet.yaml"))
         sd = load_model_from_url(MODELS["bsrnet"])

@@ -13,17 +13,10 @@ from torch.utils.tensorboard import SummaryWriter
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
-from model import ControlLDM, SwinIR, Diffusion, set_attn_mode
+from model import ControlLDM, SwinIR, Diffusion
 from utils.common import instantiate_from_config
 from utils.sampler import SpacedSampler
 
-# TODO:
-# (1) tensorboard logger (x)
-# (2) accumulate gradient
-# (3) rescale learning rate (?)
-# (4) reduce metrics (x)
-# (5) image log (x)
-# (6) resume from checkpoint (x)
 
 def log_txt_as_img(wh, xc):
     # wh a tuple of (width, height)
@@ -56,10 +49,6 @@ def main(args) -> None:
     set_seed(231)
     device = accelerator.device
     cfg = OmegaConf.load(args.config)
-
-    # Setup attention mode
-    if cfg.train.attn_mode != "auto":
-        set_attn_mode(cfg.train.attn_mode)
 
     # Setup an experiment folder:
     if accelerator.is_local_main_process:
