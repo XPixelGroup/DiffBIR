@@ -45,7 +45,7 @@ def log_txt_as_img(wh, xc):
 
 def main(args) -> None:
     # Setup accelerator:
-    accelerator = Accelerator()
+    accelerator = Accelerator(split_batches=True)
     set_seed(231)
     device = accelerator.device
     cfg = OmegaConf.load(args.config)
@@ -162,6 +162,7 @@ def main(args) -> None:
 
             if global_step % cfg.train.image_every == 0 or global_step == 1:
                 N = 12
+                log_clean = clean[:N]
                 log_cond = {k:v[:N] for k, v in cond.items()}
                 log_gt, log_lq = gt[:N], lq[:N]
                 log_prompt = prompt[:N]
@@ -177,7 +178,7 @@ def main(args) -> None:
                             ("image/samples", (pure_cldm.vae_decode(z) + 1) / 2),
                             ("image/gt", (log_gt + 1) / 2),
                             ("image/lq", log_lq),
-                            ("image/condition", clean),
+                            ("image/condition", log_clean),
                             ("image/condition_decoded", (pure_cldm.vae_decode(log_cond["c_img"]) + 1) / 2),
                             ("image/prompt", (log_txt_as_img((512, 512), log_prompt) + 1) / 2)
                         ]:

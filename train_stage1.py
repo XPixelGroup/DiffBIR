@@ -79,7 +79,7 @@ def calculate_psnr_pt(img, img2, crop_border, test_y_channel=False):
 
 def main(args) -> None:
     # Setup accelerator:
-    accelerator = Accelerator()
+    accelerator = Accelerator(split_batches=True)
     set_seed(231)
     device = accelerator.device
     cfg = OmegaConf.load(args.config)
