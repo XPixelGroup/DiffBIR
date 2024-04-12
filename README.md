@@ -80,18 +80,18 @@
 
 ## <a name="todo"></a>:climbing:TODO
 
-- [x] Release code and pretrained models:computer:.
-- [x] Update links to paper and project page:link:.
-- [x] Release real47 testset:minidisc:.
+- [x] Release code and pretrained models :computer:.
+- [x] Update links to paper and project page :link:.
+- [x] Release real47 testset :minidisc:.
 - [ ] Provide webui.
-- [ ] Reduce the vram usage of DiffBIR:fire::fire::fire:.
-- [ ] Provide HuggingFace demo:notebook::fire::fire::fire:.
-- [x] Add a patch-based sampling schedule:mag:.
-- [x] Upload inference code of latent image guidance:page_facing_up:.
-- [ ] Improve the performance:superhero:.
+- [ ] Reduce the vram usage of DiffBIR :fire::fire::fire:.
+- [ ] Provide HuggingFace demo :notebook:.
+- [x] Add a patch-based sampling schedule :mag:.
+- [x] Upload inference code of latent image guidance :page_facing_up:.
+- [ ] Improve the performance :superhero:.
 - [x] Support MPS acceleration for MacOS users.
-- [ ] DiffBIR-turbo.
-- [ ] Speed up inference, such as using fp16/bf16, torch.compile:fire::fire::fire:.
+- [ ] DiffBIR-turbo :fire::fire::fire:.
+- [ ] Speed up inference, such as using fp16/bf16, torch.compile :fire::fire::fire:.
 
 ## <a name="installation"></a>:gear:Installation
 
