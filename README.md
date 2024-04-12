@@ -26,13 +26,25 @@
 
 ## :book:Table Of Contents
 
-- [Visual Results On Real-world Images](#visual_results)
 - [Update](#update)
+- [Visual Results On Real-world Images](#visual_results)
 - [TODO](#todo)
 - [Installation](#installation)
 - [Pretrained Models](#pretrained_models)
 - [Inference](#inference)
 - [Train](#train)
+
+## <a name="update"></a>:new:Update
+
+- **2024.04.08**: ✅ Release everything about our [updated manuscript](https://arxiv.org/abs/2308.15070), including (1) a **new model** trained on subset of laion2b-en and (2) a **more readable code base**, etc. DiffBIR is now a general restoration pipeline that could handle different blind image restoration tasks with a unified generation module.
+- **2023.09.19**: ✅ Add support for Apple Silicon! Check [installation_xOS.md](assets/docs/installation_xOS.md) to work with **CPU/CUDA/MPS** device!
+- **2023.09.14**: ✅ Integrate a patch-based sampling strategy ([mixture-of-diffusers](https://github.com/albarji/mixture-of-diffusers)). [**Try it!**](#patch-based-sampling) Here is an [example](https://imgsli.com/MjA2MDA1) with a resolution of 2396 x 1596. GPU memory usage will continue to be optimized in the future and we are looking forward to your pull requests!
+- **2023.09.14**: ✅ Add support for background upsampler (DiffBIR/[RealESRGAN](https://github.com/xinntao/Real-ESRGAN)) in face enhancement! :rocket: [**Try it!**](#inference_fr)
+- **2023.09.13**: :rocket: Provide online demo (DiffBIR-official) in [OpenXLab](https://openxlab.org.cn/apps/detail/linxinqi/DiffBIR-official), which integrates both general model and face model. Please have a try! [camenduru](https://github.com/camenduru) also implements an online demo, thanks for his work.:hugs:
+- **2023.09.12**: ✅ Upload inference code of latent image guidance and release [real47](inputs/real47) testset.
+- **2023.09.08**: ✅ Add support for restoring unaligned faces.
+- **2023.09.06**: :rocket: Update [colab demo](https://colab.research.google.com/github/camenduru/DiffBIR-colab/blob/main/DiffBIR_colab.ipynb). Thanks to [camenduru](https://github.com/camenduru)!:hugs:
+- **2023.08.30**: This repo is released.
 
 ## <a name="visual_results"></a>:eyes:Visual Results On Real-world Images
 
@@ -44,11 +56,11 @@
 
 [<img src="assets/visual_results/bsr3.png" height="223px"/>](https://imgsli.com/MTk5ODI0) [<img src="assets/visual_results/bsr5.png" height="223px"/>](https://imgsli.com/MjAxMjM0) -->
 
-[<img src="assets/visual_results/bsr1.png" height="223px"/>](https://imgsli.com/MTk5ODIy) [<img src="assets/visual_results/bsr5.png" height="223px"/>](https://imgsli.com/MjAxMjM0)
+<!-- [<img src="assets/visual_results/bsr1.png" height="223px"/>](https://imgsli.com/MTk5ODIy) [<img src="assets/visual_results/bsr5.png" height="223px"/>](https://imgsli.com/MjAxMjM0) -->
 
 ### Blind Face Restoration
 
-[<img src="assets/visual_results/bfr1.png" height="223px"/>](https://imgsli.com/MTk5ODI5) [<img src="assets/visual_results/bfr2.png" height="223px"/>](https://imgsli.com/MTk5ODMw) [<img src="assets/visual_results/bfr4.png" height="223px"/>](https://imgsli.com/MTk5ODM0)
+<!-- [<img src="assets/visual_results/bfr1.png" height="223px"/>](https://imgsli.com/MTk5ODI5) [<img src="assets/visual_results/bfr2.png" height="223px"/>](https://imgsli.com/MTk5ODMw) [<img src="assets/visual_results/bfr4.png" height="223px"/>](https://imgsli.com/MTk5ODM0) -->
 
 [<img src="assets/visual_results/whole_image1.png" height="370"/>](https://imgsli.com/MjA2MTU0) 
 [<img src="assets/visual_results/whole_image2.png" height="370"/>](https://imgsli.com/MjA2MTQ4)
@@ -65,18 +77,6 @@
 > I often think of Bag End. I miss my books and my arm chair, and my garden. See, that's where I belong. That's home. --- Bilbo Baggins
 
 [<img src="assets/visual_results/tiled_sampling.png" height="480px"/>](https://imgsli.com/MjUzODE4)
-
-## <a name="update"></a>:new:Update
-
-- **2024.04.08**: ✅ Release everything about our [updated manuscript](https://arxiv.org/abs/2308.15070), including (1) a **new model** trained on subset of laion2b-en and (2) a **more readable code base**, etc. DiffBIR is now a general restoration pipeline that could handle different blind image restoration tasks with a unified generation module.
-- **2023.09.19**: ✅ Add support for Apple Silicon! Check [installation_xOS.md](assets/docs/installation_xOS.md) to work with **CPU/CUDA/MPS** device!
-- **2023.09.14**: ✅ Integrate a patch-based sampling strategy ([mixture-of-diffusers](https://github.com/albarji/mixture-of-diffusers)). [**Try it!**](#patch-based-sampling) Here is an [example](https://imgsli.com/MjA2MDA1) with a resolution of 2396 x 1596. GPU memory usage will continue to be optimized in the future and we are looking forward to your pull requests!
-- **2023.09.14**: ✅ Add support for background upsampler (DiffBIR/[RealESRGAN](https://github.com/xinntao/Real-ESRGAN)) in face enhancement! :rocket: [**Try it!**](#inference_fr)
-- **2023.09.13**: :rocket: Provide online demo (DiffBIR-official) in [OpenXLab](https://openxlab.org.cn/apps/detail/linxinqi/DiffBIR-official), which integrates both general model and face model. Please have a try! [camenduru](https://github.com/camenduru) also implements an online demo, thanks for his work.:hugs:
-- **2023.09.12**: ✅ Upload inference code of latent image guidance and release [real47](inputs/real47) testset.
-- **2023.09.08**: ✅ Add support for restoring unaligned faces.
-- **2023.09.06**: :rocket: Update [colab demo](https://colab.research.google.com/github/camenduru/DiffBIR-colab/blob/main/DiffBIR_colab.ipynb). Thanks to [camenduru](https://github.com/camenduru)!:hugs:
-- **2023.08.30**: This repo is released.
 
 ## <a name="todo"></a>:climbing:TODO
 
@@ -115,10 +115,10 @@ Here we list pretrained weight of stage 2 model (IRControlNet) and our trained S
 
 | Model Name | Description | HuggingFace | BaiduNetdisk | OpenXLab |
 | :---------: | :----------: | :----------: | :----------: | :----------: |
-| v2.pth | IRControlNet trained on filtered laion2b-en  | [download](https://huggingface.co/lxq007/DiffBIR-v2/resolve/main/v2.pth) | [download](https://pan.baidu.com/s/1uTAFl13xgGAzrnznAApyng?pwd=xiu3)<br>(pwd: xiu3) | [download](https://download.openxlab.org.cn/repos/file/linxinqi/DiffBIR/main?filepath=v2.pth&sign=e71fbc40d2a1c1c4a45e860701954e6b&nonce=1712581884856) |
-| v1_general.pth | IRControlNet trained on ImageNet-1k | [download](https://huggingface.co/lxq007/DiffBIR-v2/resolve/main/v1_general.pth) | [download](https://pan.baidu.com/s/1PhXHAQSTOUX4Gy3MOc2t2Q?pwd=79n9)<br>(pwd: 79n9) | [download](https://download.openxlab.org.cn/repos/file/linxinqi/DiffBIR/main?filepath=v1_general.pth&sign=6dacb066be8339cd2814f162c0447535&nonce=1712581928407) |
-| v1_face.pth | IRControlNet trained on FFHQ | [download](https://huggingface.co/lxq007/DiffBIR-v2/resolve/main/v1_face.pth) | [download](https://pan.baidu.com/s/1kvM_SB1VbXjbipLxdzlI3Q?pwd=n7dx)<br>(pwd: n7dx) | [download](https://download.openxlab.org.cn/repos/file/linxinqi/DiffBIR/main?filepath=v1_face.pth&sign=45d329c9007a7d3c7d44b54cc9660c51&nonce=1712581953073) |
-| codeformer_swinir.ckpt | SwinIR trained on ImageNet-1k | [download](https://huggingface.co/lxq007/DiffBIR-v2/resolve/main/codeformer_swinir.ckpt) | [download](https://pan.baidu.com/s/176fARg2ySYtDgX2vQOeRbA?pwd=vfif)<br>(pwd: vfif) | [download](https://download.openxlab.org.cn/repos/file/linxinqi/DiffBIR/main?filepath=codeformer_swinir.ckpt&sign=d7f783f73e50bf3ac9e7d5c13612bc63&nonce=1712581967673) |
+| v2.pth | IRControlNet trained on filtered laion2b-en  | [download](https://huggingface.co/lxq007/DiffBIR-v2/resolve/main/v2.pth) | [download](https://pan.baidu.com/s/1uTAFl13xgGAzrnznAApyng?pwd=xiu3)<br>(pwd: xiu3) | [download](https://openxlab.org.cn/models/detail/linxinqi/DiffBIR/tree/main) |
+| v1_general.pth | IRControlNet trained on ImageNet-1k | [download](https://huggingface.co/lxq007/DiffBIR-v2/resolve/main/v1_general.pth) | [download](https://pan.baidu.com/s/1PhXHAQSTOUX4Gy3MOc2t2Q?pwd=79n9)<br>(pwd: 79n9) | [download](https://openxlab.org.cn/models/detail/linxinqi/DiffBIR/tree/main) |
+| v1_face.pth | IRControlNet trained on FFHQ | [download](https://huggingface.co/lxq007/DiffBIR-v2/resolve/main/v1_face.pth) | [download](https://pan.baidu.com/s/1kvM_SB1VbXjbipLxdzlI3Q?pwd=n7dx)<br>(pwd: n7dx) | [download](https://openxlab.org.cn/models/detail/linxinqi/DiffBIR/tree/main) |
+| codeformer_swinir.ckpt | SwinIR trained on ImageNet-1k | [download](https://huggingface.co/lxq007/DiffBIR-v2/resolve/main/codeformer_swinir.ckpt) | [download](https://pan.baidu.com/s/176fARg2ySYtDgX2vQOeRbA?pwd=vfif)<br>(pwd: vfif) | [download](https://openxlab.org.cn/models/detail/linxinqi/DiffBIR/tree/main) |
 
 During inference, we use off-the-shelf models from other papers as the stage 1 model: [BSRNet](https://github.com/cszn/BSRGAN) for BSR, [SwinIR-Face](https://github.com/zsyOAOA/DifFace) used in DifFace for BFR, and [SCUNet-PSNR](https://github.com/cszn/SCUNet) for BID, while the trained IRControlNet remains **unchanged** for all tasks. Please check [code](utils/inference.py) for more details. Thanks for their work!
 
