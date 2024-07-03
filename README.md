@@ -187,7 +187,7 @@ python -u inference.py \
 
 ```shell
 python -u inference.py \
---version v2
+--version v2 \
 --task dn \
 --upscale 1 \
 --cfg_scale 4.0 \
