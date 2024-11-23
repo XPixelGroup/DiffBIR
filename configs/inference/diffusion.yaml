@@ -1,4 +1,4 @@
-target: model.Diffusion
+target: diffbir.model.Diffusion
 params:
   linear_start: 0.00085
   linear_end: 0.0120

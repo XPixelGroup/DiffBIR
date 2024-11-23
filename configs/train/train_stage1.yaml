@@ -1,6 +1,6 @@
 model:
   swinir:
-    target: model.swinir.SwinIR
+    target: diffbir.model.swinir.SwinIR
     params:
       img_size: 64
       patch_size: 1
@@ -19,12 +19,12 @@ model:
 
 dataset:
   train:
-    target: dataset.codeformer.CodeformerDataset
+    target: diffbir.dataset.codeformer.CodeformerDataset
     params:
       # training file list path
       file_list: 
       file_backend_cfg:
-        target: dataset.file_backend.HardDiskBackend
+        target: diffbir.dataset.file_backend.HardDiskBackend
       out_size: 512
       crop_type: center
       blur_kernel_size: 41
@@ -35,12 +35,12 @@ dataset:
       noise_range: [0, 15]
       jpeg_range: [30, 100]
   val:
-    target: dataset.codeformer.CodeformerDataset
+    target: diffbir.dataset.codeformer.CodeformerDataset
     params:
       # validation file list path
       file_list: 
       file_backend_cfg:
-        target: dataset.file_backend.HardDiskBackend
+        target: diffbir.dataset.file_backend.HardDiskBackend
       out_size: 512
       crop_type: center
       blur_kernel_size: 41

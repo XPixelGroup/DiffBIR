@@ -2,6 +2,7 @@
 torch==2.2.2+cu118
 torchvision==0.17.2+cu118
 torchaudio==2.2.2+cu118
+xformers==0.0.25.post1+cu118
 omegaconf==2.3.0
 accelerate==0.28.0
 einops==0.7.0
@@ -17,3 +18,8 @@ protobuf==4.25.3 # for tensorboard
 lpips==0.1.4
 facexlib==0.3.0
 gradio==4.25.0
+
+# requirements for llava
+transformers==4.37.2
+tokenizers==0.15.1
+sentencepiece==0.1.99

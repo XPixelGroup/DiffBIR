@@ -1,0 +1,7 @@
+target: diffbir.model.Diffusion
+params:
+  linear_start: 0.00085
+  linear_end: 0.0120
+  timesteps: 1000
+  zero_snr: True
+  parameterization: v

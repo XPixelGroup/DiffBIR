@@ -1,6 +1,6 @@
 model:
   cldm:
-    target: model.cldm.ControlLDM
+    target: diffbir.model.cldm.ControlLDM
     params:
       latent_scale_factor: 0.18215
       unet_cfg:
@@ -67,7 +67,7 @@ model:
         legacy: False
 
   swinir:
-    target: model.swinir.SwinIR
+    target: diffbir.model.swinir.SwinIR
     params:
       img_size: 64
       patch_size: 1
@@ -85,7 +85,7 @@ model:
       unshuffle_scale: 8
 
   diffusion:
-    target: model.gaussian_diffusion.Diffusion
+    target: diffbir.model.gaussian_diffusion.Diffusion
     params:
       linear_start: 0.00085
       linear_end: 0.0120
@@ -93,12 +93,12 @@ model:
 
 dataset:
   train:
-    target: dataset.codeformer.CodeformerDataset
+    target: diffbir.dataset.codeformer.CodeformerDataset
     params:
       # training file list path
       file_list: 
       file_backend_cfg:
-        target: dataset.file_backend.HardDiskBackend
+        target: diffbir.dataset.file_backend.HardDiskBackend
       out_size: 512
       crop_type: center
       blur_kernel_size: 41

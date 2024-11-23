@@ -1,4 +1,4 @@
-target: model.SCUNet
+target: diffbir.model.SCUNet
 params:
   in_nc: 3
   config: [4,4,4,4,4,4,4]
