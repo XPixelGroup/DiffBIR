@@ -114,18 +114,22 @@ def parse_args() -> Namespace:
     parser.add_argument(
         "--cleaner_tiled",
         action="store_true",
-        help="Enable tiled sampling, which reduces the GPU memory usage.",
+        help="Enable tiled inference for stage-1 model, which reduces the GPU memory usage.",
     )
-    parser.add_argument("--cleaner_tile_size", type=int, default=512, help="Size of each tile.")
+    parser.add_argument(
+        "--cleaner_tile_size", type=int, default=512, help="Size of each tile."
+    )
     parser.add_argument(
         "--cleaner_tile_stride", type=int, default=256, help="Stride between tiles."
     )
     parser.add_argument(
         "--vae_tiled",
         action="store_true",
-        help="Enable tiled sampling, which reduces the GPU memory usage.",
+        help="Enable tiled inference for AE, which reduces the GPU memory usage.",
     )
-    parser.add_argument("--vae_tile_size", type=int, default=256, help="Size of each tile.")
+    parser.add_argument(
+        "--vae_tile_size", type=int, default=256, help="Size of each tile."
+    )
     parser.add_argument(
         "--vae_tile_stride", type=int, default=128, help="Stride between tiles."
     )
@@ -134,7 +138,9 @@ def parse_args() -> Namespace:
         action="store_true",
         help="Enable tiled sampling, which reduces the GPU memory usage.",
     )
-    parser.add_argument("--cldm_tile_size", type=int, default=512, help="Size of each tile.")
+    parser.add_argument(
+        "--cldm_tile_size", type=int, default=512, help="Size of each tile."
+    )
     parser.add_argument(
         "--cldm_tile_stride", type=int, default=256, help="Stride between tiles."
     )
@@ -254,6 +260,7 @@ def parse_args() -> Namespace:
     parser.add_argument(
         "--device", type=str, default="cuda", choices=["cpu", "cuda", "mps"]
     )
+    parser.add_argument("--precision", type=str, default="fp32", choices=["fp32", "fp16", "bf16"])
 
     return parser.parse_args()
 

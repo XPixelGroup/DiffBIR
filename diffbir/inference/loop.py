@@ -141,6 +141,12 @@ class InferenceLoop:
     @torch.no_grad()
     def run(self) -> None:
         self.setup()
+        auto_cast_type = {
+            "fp32": torch.float32,
+            "fp16": torch.float16,
+            "bf16": torch.bfloat16,
+        }[self.args.precision]
+        
         for lq in self.load_lq():
             # prepare prompt
             with VRAMPeakMonitor("applying captioner"):
@@ -158,33 +164,34 @@ class InferenceLoop:
             samples = []
             for i in range(num_batches):
                 n_inputs = min((i + 1) * batch_size, n_samples) - i * batch_size
-                batch_samples = self.pipeline.run(
-                    np.tile(lq[None], (n_inputs, 1, 1, 1)),
-                    self.args.steps,
-                    self.args.strength,
-                    self.args.cleaner_tiled,
-                    self.args.cleaner_tile_size,
-                    self.args.cleaner_tile_stride,
-                    self.args.vae_tiled,
-                    self.args.vae_tile_size,
-                    self.args.vae_tile_stride,
-                    self.args.cldm_tiled,
-                    self.args.cldm_tile_size,
-                    self.args.cldm_tile_stride,
-                    pos_prompt,
-                    neg_prompt,
-                    self.args.cfg_scale,
-                    self.args.start_point_type,
-                    self.args.sampler,
-                    self.args.noise_aug,
-                    self.args.rescale_cfg,
-                    self.args.s_churn,
-                    self.args.s_tmin,
-                    self.args.s_tmax,
-                    self.args.s_noise,
-                    self.args.eta,
-                    self.args.order,
-                )
+                with torch.autocast(self.args.device, auto_cast_type):
+                    batch_samples = self.pipeline.run(
+                        np.tile(lq[None], (n_inputs, 1, 1, 1)),
+                        self.args.steps,
+                        self.args.strength,
+                        self.args.cleaner_tiled,
+                        self.args.cleaner_tile_size,
+                        self.args.cleaner_tile_stride,
+                        self.args.vae_tiled,
+                        self.args.vae_tile_size,
+                        self.args.vae_tile_stride,
+                        self.args.cldm_tiled,
+                        self.args.cldm_tile_size,
+                        self.args.cldm_tile_stride,
+                        pos_prompt,
+                        neg_prompt,
+                        self.args.cfg_scale,
+                        self.args.start_point_type,
+                        self.args.sampler,
+                        self.args.noise_aug,
+                        self.args.rescale_cfg,
+                        self.args.s_churn,
+                        self.args.s_tmin,
+                        self.args.s_tmax,
+                        self.args.s_noise,
+                        self.args.eta,
+                        self.args.order,
+                    )
                 samples.extend(list(batch_samples))
             self.save(samples, pos_prompt, neg_prompt)
 
