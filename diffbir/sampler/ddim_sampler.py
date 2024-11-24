@@ -197,7 +197,7 @@ class DDIMSampler(Sampler):
             t = torch.full((bs,), total_steps - i - 1, device=device, dtype=torch.long)
             cur_cfg_scale = self.get_cfg_scale(cfg_scale, step)
             x = self.p_sample(model, x, model_t, t, cond, uncond, cur_cfg_scale)
-            
+
         if tiled:
             model.forward = forward
         return x

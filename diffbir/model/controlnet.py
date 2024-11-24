@@ -21,7 +21,7 @@ class ControlledUnetModel(UNetModel):
         hs = []
         t_emb = timestep_embedding(timesteps, self.model_channels, repeat_only=False)
         emb = self.time_embed(t_emb)
-        h = x.type(self.dtype)
+        h, emb, context = map(lambda t: t.type(self.dtype), (x, emb, context))
         for module in self.input_blocks:
             h = module(h, emb, context)
             hs.append(h)
@@ -266,7 +266,7 @@ class ControlNet(nn.Module):
         x = torch.cat((x, hint), dim=1)
         outs = []
 
-        h = x.type(self.dtype)
+        h, emb, context = map(lambda t: t.type(self.dtype), (x, emb, context))
         for module, zero_conv in zip(self.input_blocks, self.zero_convs):
             h = module(h, emb, context)
             outs.append(zero_conv(h, emb, context))

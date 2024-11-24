@@ -5,6 +5,7 @@ from torch import nn
 
 from .controlnet import ControlledUnetModel, ControlNet
 from .vae import AutoencoderKL
+from .util import GroupNorm32
 from .clip import FrozenOpenCLIPEmbedder
 from ..utils.common import trace_vram_usage, make_tiled_fn
 
@@ -168,3 +169,41 @@ class ControlLDM(nn.Module):
             only_mid_control=False,
         )
         return eps
+
+    def cast_dtype(self, dtype: torch.dtype) -> "ControlLDM":
+        self.unet.dtype = dtype
+        self.controlnet.dtype = dtype
+        # convert unet blocks to dtype
+        for module in [
+            self.unet.input_blocks,
+            self.unet.middle_block,
+            self.unet.output_blocks,
+        ]:
+            module.type(dtype)
+        # convert controlnet blocks and zero-convs to dtype
+        for module in [
+            self.controlnet.input_blocks,
+            self.controlnet.zero_convs,
+            self.controlnet.middle_block,
+            self.controlnet.middle_block_out,
+        ]:
+            module.type(dtype)
+
+        def cast_groupnorm_32(m):
+            if isinstance(m, GroupNorm32):
+                m.type(torch.float32)
+
+        # GroupNorm32 only works with float32
+        for module in [
+            self.unet.input_blocks,
+            self.unet.middle_block,
+            self.unet.output_blocks,
+        ]:
+            module.apply(cast_groupnorm_32)
+        for module in [
+            self.controlnet.input_blocks,
+            self.controlnet.zero_convs,
+            self.controlnet.middle_block,
+            self.controlnet.middle_block_out,
+        ]:
+            module.apply(cast_groupnorm_32)

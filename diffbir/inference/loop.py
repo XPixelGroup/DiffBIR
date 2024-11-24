@@ -80,6 +80,12 @@ class InferenceLoop:
         self.cldm.load_controlnet_from_ckpt(control_weight)
         print(f"load controlnet weight")
         self.cldm.eval().to(self.args.device)
+        cast_type = {
+            "fp32": torch.float32,
+            "fp16": torch.float16,
+            "bf16": torch.bfloat16,
+        }[self.args.precision]
+        self.cldm.cast_dtype(cast_type)
 
         # load diffusion
         if self.args.version in ["v1", "v2"]:
