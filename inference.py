@@ -147,7 +147,7 @@ def parse_args() -> Namespace:
     parser.add_argument(
         "--captioner",
         type=str,
-        choices=["none", "llava"],
+        choices=["none", "llava", "ram"],
         default="llava",
         help="Select a model to describe the content of your input image.",
     )

@@ -23,3 +23,6 @@ gradio==4.25.0
 transformers==4.37.2
 tokenizers==0.15.1
 sentencepiece==0.1.99
+
+# requirements for ram
+fairscale==0.4.4

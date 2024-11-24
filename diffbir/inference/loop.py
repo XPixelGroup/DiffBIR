@@ -18,7 +18,13 @@ from .pretrained_models import MODELS
 from ..pipeline import Pipeline
 from ..utils.cond_fn import MSEGuidance, WeightedMSEGuidance
 from ..model import ControlLDM, Diffusion
-from ..utils.caption import LLaVACaptioner, EmptyCaptioner, LLAVA_AVAILABLE
+from ..utils.caption import (
+    LLaVACaptioner,
+    EmptyCaptioner,
+    RAMCaptioner,
+    LLAVA_AVAILABLE,
+    RAM_AVAILABLE,
+)
 
 
 class InferenceLoop:
@@ -112,6 +118,9 @@ class InferenceLoop:
         elif self.args.captioner == "llava":
             assert LLAVA_AVAILABLE, "llava is not available in your environment."
             self.captioner = LLaVACaptioner(self.args.device, self.args.llava_bit)
+        elif self.args.captioner == "ram":
+            assert RAM_AVAILABLE, "ram is not available in your environment."
+            self.captioner = RAMCaptioner(self.args.device)
         else:
             raise ValueError(f"unsupported captioner: {self.args.captioner}")
 

@@ -1,0 +1,29 @@
+train_file: [
+            'datasets/train/coco_train_rmcocodev_ram.json',
+            'datasets/train/vg_ram.json',
+            'datasets/train/sbu_ram.json',
+            'datasets/train/cc3m_train_ram.json',
+            'datasets/train/cc3m_val_ram.json',
+            'datasets/train/cc12m_ram.json',
+             ]
+image_path_root: ""
+
+# size of vit model; base or large
+vit: 'swin_l'
+vit_grad_ckpt: False
+vit_ckpt_layer: 0
+
+image_size: 224
+batch_size: 52
+
+# optimizer
+weight_decay: 0.05
+init_lr: 1e-4
+min_lr: 5e-7
+warmup_lr: 5e-7
+lr_decay_rate: 0.9
+max_epoch: 5
+warmup_steps: 3000
+
+class_num: 4585
+

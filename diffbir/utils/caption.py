@@ -21,9 +21,20 @@ try:
     )
 
     LLAVA_AVAILABLE = True
-except:
-    print("failed to import llava, please check requirements.txt, L23-L25")
+except Exception as e:
+    print(f"failed to import llava, error: {e}")
     LLAVA_AVAILABLE = False
+
+
+try:
+    from ram.models import ram_plus
+    from ram import inference_ram as inference
+    from ram import get_transform
+
+    RAM_AVAILABLE = True
+except Exception as e:
+    print(f"failed to import ram, error: {e}")
+    RAM_AVAILABLE = False
 
 
 class Captioner:
@@ -43,7 +54,9 @@ class EmptyCaptioner(Captioner):
 
 class LLaVACaptioner(Captioner):
 
-    def __init__(self, device: torch.device, llava_bit: Literal["16", "8", "4"]) -> "LLaVACaptioner":
+    def __init__(
+        self, device: torch.device, llava_bit: Literal["16", "8", "4"]
+    ) -> "LLaVACaptioner":
         super().__init__(device)
         if llava_bit == "16":
             load_4bit, load_8bit = False, False
@@ -134,3 +147,25 @@ class LLaVACaptioner(Captioner):
         outputs = self.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         res = [s.strip() for s in outputs]
         return res[0]
+
+
+class RAMCaptioner(Captioner):
+
+    def __init__(self, device: torch.device) -> Captioner:
+        super().__init__(device)
+        image_size = 384
+        transform = get_transform(image_size=image_size)
+        pretrained = "https://huggingface.co/xinyu1205/recognize-anything-plus-model/resolve/main/ram_plus_swin_large_14m.pth"
+        model = ram_plus(pretrained=pretrained, image_size=image_size, vit="swin_l")
+        model.eval()
+        model = model.to(device)
+
+        self.transform = transform
+        self.model = model
+
+    def __call__(self, image: Image.Image) -> str:
+        image = self.transform(image).unsqueeze(0).to(self.device)
+        res = inference(image, self.model)
+        # res[0]: armchair | blanket | lamp | ...
+        # res[1]: 扶手椅  | 毯子/覆盖层 | 灯  | ...
+        return res[0].replace(" | ", ", ")
