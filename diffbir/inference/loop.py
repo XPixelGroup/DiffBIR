@@ -111,7 +111,7 @@ class InferenceLoop:
             self.captioner = EmptyCaptioner(self.args.device)
         elif self.args.captioner == "llava":
             assert LLAVA_AVAILABLE, "llava is not available in your environment."
-            self.captioner = LLaVACaptioner(self.args.device)
+            self.captioner = LLaVACaptioner(self.args.device, self.args.llava_bit)
         else:
             raise ValueError(f"unsupported captioner: {self.args.captioner}")
 

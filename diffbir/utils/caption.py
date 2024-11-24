@@ -1,4 +1,4 @@
-from typing import overload
+from typing import overload, Literal
 import re
 
 from PIL import Image
@@ -36,22 +36,34 @@ class Captioner:
 
 
 class EmptyCaptioner(Captioner):
-    
+
     def __call__(self, image: Image.Image) -> str:
         return ""
 
 
 class LLaVACaptioner(Captioner):
 
-    def __init__(self, device: torch.device) -> "LLaVACaptioner":
+    def __init__(self, device: torch.device, llava_bit: Literal["16", "8", "4"]) -> "LLaVACaptioner":
         super().__init__(device)
+        if llava_bit == "16":
+            load_4bit, load_8bit = False, False
+        elif llava_bit == "8":
+            load_4bit, load_8bit = False, True
+        else:
+            load_4bit, load_8bit = True, False
 
         model_path = "liuhaotian/llava-v1.5-7b"
         model_name = get_model_name_from_path(model_path)
         device_map = {"": device}
         self.tokenizer, self.model, self.image_processor, context_len = (
             load_pretrained_model(
-                model_path, None, model_name, device=device, device_map=device_map
+                model_path,
+                None,
+                model_name,
+                device=device,
+                device_map=device_map,
+                load_4bit=load_4bit,
+                load_8bit=load_8bit,
             )
         )
         self.model.eval()
