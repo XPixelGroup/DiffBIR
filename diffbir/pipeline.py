@@ -14,9 +14,10 @@ from .sampler import (
 )
 from .utils.cond_fn import Guidance
 from .utils.common import (
-    wavelet_decomposition,
     wavelet_reconstruction,
-    count_vram_usage,
+    trace_vram_usage,
+    make_tiled_fn,
+    VRAMPeakMonitor,
 )
 from .model import ControlLDM, Diffusion, RRDBNet
 
@@ -56,23 +57,28 @@ class Pipeline:
         self.diffusion = diffusion
         self.cond_fn = cond_fn
         self.device = device
-        self.output_size: Tuple[int] = None
+        self.output_size: Tuple[int, int] = None
 
     def set_output_size(self, lq_size: Tuple[int]) -> None:
         h, w = lq_size[2:]
         self.output_size = (h, w)
 
     @overload
-    def apply_cleaner(self, lq: torch.Tensor) -> torch.Tensor: ...
+    def apply_cleaner(
+        self, lq: torch.Tensor, tiled: bool, tile_size: int, tile_stride: int
+    ) -> torch.Tensor: ...
 
     def apply_cldm(
         self,
         cond_img: torch.Tensor,
         steps: int,
         strength: float,
-        tiled: bool,
-        tile_size: int,
-        tile_stride: int,
+        vae_tiled: bool,
+        vae_tile_size: int,
+        vae_tile_stride: int,
+        cldm_tiled: bool,
+        cldm_tile_size: int,
+        cldm_tile_stride: int,
         pos_prompt: str,
         neg_prompt: str,
         cfg_scale: float,
@@ -92,15 +98,12 @@ class Pipeline:
         cond_img = pad_to_multiples_of(cond_img, multiple=64)
         h1, w1 = cond_img.shape[2:]
         # encode conditon
-        if not tiled:
-            cond = self.cldm.prepare_condition(cond_img, [pos_prompt] * bs)
-            uncond = self.cldm.prepare_condition(cond_img, [neg_prompt] * bs)
-        else:
-            cond = self.cldm.prepare_condition_tiled(
-                cond_img, [pos_prompt] * bs, tile_size, tile_stride
+        with VRAMPeakMonitor("encoding condition image"):
+            cond = self.cldm.prepare_condition(
+                cond_img, [pos_prompt] * bs, vae_tiled, vae_tile_size, vae_tile_stride
             )
-            uncond = self.cldm.prepare_condition_tiled(
-                cond_img, [neg_prompt] * bs, tile_size, tile_stride
+            uncond = self.cldm.prepare_condition(
+                cond_img, [neg_prompt] * bs, vae_tiled, vae_tile_size, vae_tile_stride
             )
         # prepare start point of sampling
         if start_point_type == "cond":
@@ -162,22 +165,24 @@ class Pipeline:
         else:
             raise NotImplementedError(sampler_type)
         # run sampler
-        z = sampler.sample(
-            model=self.cldm,
-            device=self.device,
-            steps=steps,
-            x_size=(bs, 4, h1 // 8, w1 // 8),
-            cond=cond,
-            uncond=uncond,
-            cfg_scale=cfg_scale,
-            x_T=x_T,
-            progress=True,
-        )
+        with VRAMPeakMonitor("sampling"):
+            z = sampler.sample(
+                model=self.cldm,
+                device=self.device,
+                steps=steps,
+                x_size=(bs, 4, h1 // 8, w1 // 8),
+                cond=cond,
+                uncond=uncond,
+                cfg_scale=cfg_scale,
+                tiled=cldm_tiled,
+                tile_size=cldm_tile_size // 8,
+                tile_stride=cldm_tile_stride // 8,
+                x_T=x_T,
+                progress=True,
+            )
         # decode generated latents
-        if not tiled:
-            x = self.cldm.vae_decode(z)
-        else:
-            x = self.cldm.vae_decode_tiled(z, tile_size // 8, tile_stride // 8)
+        with VRAMPeakMonitor("decoding generated latent"):
+            x = self.cldm.vae_decode(z, vae_tiled, vae_tile_size // 8, vae_tile_stride // 8)
         # restore control strength
         self.cldm.control_scales = control_scales
         # remove padding
@@ -190,9 +195,15 @@ class Pipeline:
         lq: np.ndarray,
         steps: int,
         strength: float,
-        tiled: bool,
-        tile_size: int,
-        tile_stride: int,
+        cleaner_tiled: bool,
+        cleaner_tile_size: int,
+        cleaner_tile_stride: int,
+        vae_tiled: bool,
+        vae_tile_size: int,
+        vae_tile_stride: int,
+        cldm_tiled: bool,
+        cldm_tile_size: int,
+        cldm_tile_stride: int,
         pos_prompt: str,
         neg_prompt: str,
         cfg_scale: float,
@@ -215,7 +226,10 @@ class Pipeline:
             .contiguous()
         )
         self.set_output_size(lq_tensor.size())
-        cond_img = self.apply_cleaner(lq_tensor)
+        with VRAMPeakMonitor("applying cleaner"):
+            cond_img = self.apply_cleaner(
+                lq_tensor, cleaner_tiled, cleaner_tile_size, cleaner_tile_stride
+            )
         assert all(x >= 512 for x in cond_img.shape[2:]), (
             "The resolution of stage-1 model output should be greater than 512, "
             "since it will be used as condition for stage-2 model."
@@ -224,9 +238,12 @@ class Pipeline:
             cond_img,
             steps,
             strength,
-            tiled,
-            tile_size,
-            tile_stride,
+            vae_tiled,
+            vae_tile_size,
+            vae_tile_stride,
+            cldm_tiled,
+            cldm_tile_size,
+            cldm_tile_stride,
             pos_prompt,
             neg_prompt,
             cfg_scale,
@@ -277,8 +294,20 @@ class BSRNetPipeline(Pipeline):
         h, w = lq_size[2:]
         self.output_size = (int(h * self.upscale), int(w * self.upscale))
 
-    def apply_cleaner(self, lq: torch.Tensor) -> torch.Tensor:
-        output_upscale4 = self.cleaner(lq)
+    def apply_cleaner(
+        self, lq: torch.Tensor, tiled: bool, tile_size: int, tile_stride: int
+    ) -> torch.Tensor:
+        if tiled:
+            model = make_tiled_fn(
+                self.cleaner,
+                tile_size,
+                tile_stride,
+                scale_type="up",
+                scale=4,
+            )
+        else:
+            model = self.cleaner
+        output_upscale4 = model(lq)
         if min(self.output_size) < 512:
             output = resize_short_edge_to(output_upscale4, size=512)
         else:
@@ -290,20 +319,42 @@ class BSRNetPipeline(Pipeline):
 
 class SwinIRPipeline(Pipeline):
 
-    def apply_cleaner(self, lq: torch.Tensor) -> torch.Tensor:
+    def apply_cleaner(
+        self, lq: torch.Tensor, tiled: bool, tile_size: int, tile_stride: int
+    ) -> torch.Tensor:
         if min(lq.shape[2:]) < 512:
             lq = resize_short_edge_to(lq, size=512)
         h0, w0 = lq.shape[2:]
         lq = pad_to_multiples_of(lq, multiple=64)
-        output = self.cleaner(lq)
+
+        if tiled:
+            model = make_tiled_fn(
+                self.cleaner,
+                tile_size,
+                tile_stride,
+            )
+        else:
+            model = self.cleaner
+
+        output = model(lq)
         output = output[:, :, :h0, :w0]
         return output
 
 
 class SCUNetPipeline(Pipeline):
 
-    def apply_cleaner(self, lq: torch.Tensor) -> torch.Tensor:
-        output = self.cleaner(lq)
+    def apply_cleaner(
+        self, lq: torch.Tensor, tiled: bool, tile_size: int, tile_stride: int
+    ) -> torch.Tensor:
+        if tiled:
+            model = make_tiled_fn(
+                self.cleaner,
+                tile_size,
+                tile_stride,
+            )
+        else:
+            model = self.cleaner
+        output = model(lq)
         if min(output.shape[2:]) < 512:
             output = resize_short_edge_to(output, size=512)
         return output

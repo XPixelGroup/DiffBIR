@@ -112,13 +112,31 @@ def parse_args() -> Namespace:
         ),
     )
     parser.add_argument(
-        "--tiled",
+        "--cleaner_tiled",
         action="store_true",
         help="Enable tiled sampling, which reduces the GPU memory usage.",
     )
-    parser.add_argument("--tile_size", type=int, default=512, help="Size of each tile.")
+    parser.add_argument("--cleaner_tile_size", type=int, default=512, help="Size of each tile.")
     parser.add_argument(
-        "--tile_stride", type=int, default=256, help="Stride between tiles."
+        "--cleaner_tile_stride", type=int, default=256, help="Stride between tiles."
+    )
+    parser.add_argument(
+        "--vae_tiled",
+        action="store_true",
+        help="Enable tiled sampling, which reduces the GPU memory usage.",
+    )
+    parser.add_argument("--vae_tile_size", type=int, default=256, help="Size of each tile.")
+    parser.add_argument(
+        "--vae_tile_stride", type=int, default=128, help="Stride between tiles."
+    )
+    parser.add_argument(
+        "--cldm_tiled",
+        action="store_true",
+        help="Enable tiled sampling, which reduces the GPU memory usage.",
+    )
+    parser.add_argument("--cldm_tile_size", type=int, default=512, help="Size of each tile.")
+    parser.add_argument(
+        "--cldm_tile_stride", type=int, default=256, help="Stride between tiles."
     )
     parser.add_argument(
         "--captioner",

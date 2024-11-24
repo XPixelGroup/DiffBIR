@@ -47,6 +47,9 @@ class Sampler(nn.Module):
         cond: Dict[str, torch.Tensor],
         uncond: Dict[str, torch.Tensor],
         cfg_scale: float,
+        tiled: bool = False,
+        tile_size: int = -1,
+        tile_stride: int = -1,
         x_T: Optional[torch.Tensor] = None,
         progress: bool = True,
     ) -> torch.Tensor: ...

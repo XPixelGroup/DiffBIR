@@ -1,8 +1,6 @@
 from typing import Literal, Dict, Optional, Callable
-from functools import partial
 import numpy as np
 import torch
-from torch import nn
 
 from .sampler import Sampler
 from .k_diffusion import (
@@ -22,6 +20,7 @@ from .k_diffusion import (
     append_dims,
 )
 from ..model.cldm import ControlLDM
+from ..utils.common import make_tiled_fn, trace_vram_usage
 
 
 class EDMSampler(Sampler):
@@ -90,7 +89,7 @@ class EDMSampler(Sampler):
         # alphas_cumprod = np.clip(alphas_cumprod, a_min=1e-6)
         alphas_cumprod[0] = 1e-8
         sigmas = ((1 - alphas_cumprod) / alphas_cumprod) ** 0.5
-        print(sigmas)
+        # print(sigmas)
         sigmas = np.append(sigmas, 0)
         timesteps = np.append(timesteps, 0)
         self.register("sigmas", sigmas)
@@ -137,6 +136,7 @@ class EDMSampler(Sampler):
 
         return denoiser
 
+    @torch.no_grad()
     def sample(
         self,
         model: ControlLDM,
@@ -146,11 +146,30 @@ class EDMSampler(Sampler):
         cond: Dict[str, torch.Tensor],
         uncond: Dict[str, torch.Tensor],
         cfg_scale: float,
+        tiled: bool = False,
+        tile_size: int = -1,
+        tile_stride: int = -1,
         x_T: torch.Tensor | None = None,
         progress: bool = True,
     ) -> torch.Tensor:
         self.make_schedule(steps)
         self.to(device)
+        if tiled:
+            forward = model.forward
+            model.forward = make_tiled_fn(
+                lambda x_tile, t, cond, hi, hi_end, wi, wi_end: (
+                    forward(
+                        x_tile,
+                        t,
+                        {
+                            "c_txt": cond["c_txt"],
+                            "c_img": cond["c_img"][..., hi:hi_end, wi:wi_end],
+                        },
+                    )
+                ),
+                tile_size,
+                tile_stride,
+            )
         if x_T is None:
             x_T = torch.randn(x_size, device=device, dtype=torch.float32)
 
@@ -164,4 +183,6 @@ class EDMSampler(Sampler):
             callback=None,
             disable=not progress,
         )
+        if tiled:
+            model.forward = forward
         return z

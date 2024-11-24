@@ -1,7 +1,6 @@
-from typing import Optional, Tuple, Dict, Literal
+from typing import Tuple, Dict, Literal
 
 import torch
-from torch import nn
 import numpy as np
 
 from .sampler import Sampler
@@ -12,6 +11,7 @@ from .dpm_solver_pytorch import (
 )
 from ..utils.cond_fn import Guidance
 from ..model.cldm import ControlLDM
+from ..utils.common import make_tiled_fn, trace_vram_usage
 
 
 class DPMSolverSampler(Sampler):
@@ -48,9 +48,28 @@ class DPMSolverSampler(Sampler):
         cond: Dict[str, torch.Tensor],
         uncond: Dict[str, torch.Tensor],
         cfg_scale: float,
+        tiled: bool = False,
+        tile_size: int = -1,
+        tile_stride: int = -1,
         x_T: torch.Tensor | None = None,
         progress: bool = True,
     ) -> torch.Tensor:
+        if tiled:
+            forward = model.forward
+            model.forward = make_tiled_fn(
+                lambda x_tile, t, cond, hi, hi_end, wi, wi_end: (
+                    forward(
+                        x_tile,
+                        t,
+                        {
+                            "c_txt": cond["c_txt"],
+                            "c_img": cond["c_img"][..., hi:hi_end, wi:wi_end],
+                        },
+                    )
+                ),
+                tile_size,
+                tile_stride,
+            )
         if x_T is None:
             x_T = torch.randn(x_size, device=device, dtype=torch.float32)
         x = x_T
@@ -77,4 +96,6 @@ class DPMSolverSampler(Sampler):
             order=self.order,
             return_intermediate=False,
         )
+        if tiled:
+            model.forward = forward
         return x

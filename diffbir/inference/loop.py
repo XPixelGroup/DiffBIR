@@ -1,7 +1,6 @@
 import os
-from typing import overload, Generator, List, Literal
+from typing import overload, Generator, List
 from argparse import Namespace
-from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -12,7 +11,8 @@ import pandas as pd
 from ..utils.common import (
     instantiate_from_config,
     load_model_from_url,
-    count_vram_usage,
+    trace_vram_usage,
+    VRAMPeakMonitor,
 )
 from .pretrained_models import MODELS
 from ..pipeline import Pipeline
@@ -21,66 +21,20 @@ from ..model import ControlLDM, Diffusion
 from ..utils.caption import LLaVACaptioner, EmptyCaptioner, LLAVA_AVAILABLE
 
 
-# @dataclass(frozen=False)
-# class LoooArgs:
-#     task: Literal["sr", "face", "denoise", "unaligned_face"]
-#     upscale: float
-#     version: Literal["v1", "v2", "v2.1"]
-#     sampler: Literal[
-#         "dpm++_m2",
-#         "spaced",
-#         "ddim",
-#         "edm_euler",
-#         "edm_euler_a",
-#         "edm_heun",
-#         "edm_dpm_2",
-#         "edm_dpm_2_a",
-#         "edm_lms",
-#         "edm_dpm++_2s_a",
-#         "edm_dpm++_sde",
-#         "edm_dpm++_2m",
-#         "edm_dpm++_2m_sde",
-#         "edm_dpm++_3m_sde",
-#     ]
-#     steps: int
-#     start_point_type: Literal["noise", "cond"]
-#     tiled: bool
-#     tile_size: int
-#     tile_stride: int
-#     captioner: Literal["none", "llava"]
-#     pos_prompt: str
-#     neg_prompt: str
-#     cfg_scale: float
-#     strength: float
-#     rescale_cfg: bool
-#     noise_aug: int
-#     s_churn: float
-#     s_tmin: float
-#     s_tmax: float
-#     s_noise: float
-#     eta: float
-#     order: int
-#     input: str
-#     n_samples: int
-#     batch_size: int
-#     guidance: bool
-#     g_loss: Literal["mse", "w_mse"]
-#     g_scale: float
-#     output: str
-#     device: str
-
-
 class InferenceLoop:
 
     def __init__(self, args: Namespace) -> "InferenceLoop":
         self.args = args
         self.loop_ctx = {}
         self.pipeline: Pipeline = None
-        self.load_cleaner()
-        self.load_cldm()
+        with VRAMPeakMonitor("loading cleaner model"):
+            self.load_cleaner()
+        with VRAMPeakMonitor("loading cldm model"):
+            self.load_cldm()
         self.load_cond_fn()
         self.load_pipeline()
-        self.load_captioner()
+        with VRAMPeakMonitor("loading captioner"):
+            self.load_captioner()
 
     @overload
     def load_cleaner(self) -> None: ...
@@ -189,7 +143,8 @@ class InferenceLoop:
         self.setup()
         for lq in self.load_lq():
             # prepare prompt
-            caption = self.captioner(lq)
+            with VRAMPeakMonitor("applying captioner"):
+                caption = self.captioner(lq)
             pos_prompt = ", ".join(
                 [text for text in [caption, self.args.pos_prompt] if text]
             )
@@ -207,9 +162,15 @@ class InferenceLoop:
                     np.tile(lq[None], (n_inputs, 1, 1, 1)),
                     self.args.steps,
                     self.args.strength,
-                    self.args.tiled,
-                    self.args.tile_size,
-                    self.args.tile_stride,
+                    self.args.cleaner_tiled,
+                    self.args.cleaner_tile_size,
+                    self.args.cleaner_tile_stride,
+                    self.args.vae_tiled,
+                    self.args.vae_tile_size,
+                    self.args.vae_tile_stride,
+                    self.args.cldm_tiled,
+                    self.args.cldm_tile_size,
+                    self.args.cldm_tile_stride,
                     pos_prompt,
                     neg_prompt,
                     self.args.cfg_scale,

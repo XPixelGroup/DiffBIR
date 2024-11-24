@@ -7,6 +7,7 @@ from tqdm import tqdm
 from .sampler import Sampler
 from ..model.gaussian_diffusion import extract_into_tensor
 from ..model.cldm import ControlLDM
+from ..utils.common import make_tiled_fn, trace_vram_usage
 
 
 # https://github.com/openai/guided-diffusion/blob/main/guided_diffusion/respace.py
@@ -192,11 +193,30 @@ class SpacedSampler(Sampler):
         cond: Dict[str, torch.Tensor],
         uncond: Dict[str, torch.Tensor],
         cfg_scale: float,
+        tiled: bool = False,
+        tile_size: int = -1,
+        tile_stride: int = -1,
         x_T: torch.Tensor | None = None,
         progress: bool = True,
     ) -> torch.Tensor:
         self.make_schedule(steps)
         self.to(device)
+        if tiled:
+            forward = model.forward
+            model.forward = make_tiled_fn(
+                lambda x_tile, t, cond, hi, hi_end, wi, wi_end: (
+                    forward(
+                        x_tile,
+                        t,
+                        {
+                            "c_txt": cond["c_txt"],
+                            "c_img": cond["c_img"][..., hi:hi_end, wi:wi_end],
+                        },
+                    )
+                ),
+                tile_size,
+                tile_stride,
+            )
         if x_T is None:
             x_T = torch.randn(x_size, device=device, dtype=torch.float32)
 
@@ -219,4 +239,7 @@ class SpacedSampler(Sampler):
                 uncond,
                 cur_cfg_scale,
             )
+
+        if tiled:
+            model.forward = forward
         return x

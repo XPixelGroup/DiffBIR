@@ -6,7 +6,7 @@ from torch import nn
 from .controlnet import ControlledUnetModel, ControlNet
 from .vae import AutoencoderKL
 from .clip import FrozenOpenCLIPEmbedder
-from ..utils.common import sliding_windows, count_vram_usage, gaussian_weights
+from ..utils.common import trace_vram_usage, make_tiled_fn
 
 
 def disabled_train(self: nn.Module) -> nn.Module:
@@ -89,70 +89,69 @@ class ControlLDM(nn.Module):
         self.controlnet.load_state_dict(init_sd, strict=True)
         return init_with_new_zero, init_with_scratch
 
-    def vae_encode(self, image: torch.Tensor, sample: bool = True) -> torch.Tensor:
-        if sample:
-            return self.vae.encode(image).sample() * self.scale_factor
-        else:
-            return self.vae.encode(image).mode() * self.scale_factor
-
-    def vae_encode_tiled(
-        self, image: torch.Tensor, tile_size: int, tile_stride: int, sample: bool = True
+    def vae_encode(
+        self,
+        image: torch.Tensor,
+        sample: bool = True,
+        tiled: bool = False,
+        tile_size: int = -1,
+        tile_stride: int = -1,
     ) -> torch.Tensor:
-        bs, _, h, w = image.shape
-        z = torch.zeros(
-            (bs, 4, h // 8, w // 8), dtype=torch.float32, device=image.device
-        )
-        count = torch.zeros_like(z, dtype=torch.float32)
-        weights = gaussian_weights(tile_size // 8, tile_size // 8)[None, None]
-        weights = torch.tensor(weights, dtype=torch.float32, device=image.device)
-        tiles = sliding_windows(h // 8, w // 8, tile_size // 8, tile_stride // 8)
-        for hi, hi_end, wi, wi_end in tiles:
-            tile_image = image[:, :, hi * 8 : hi_end * 8, wi * 8 : wi_end * 8]
-            z[:, :, hi:hi_end, wi:wi_end] += (
-                self.vae_encode(tile_image, sample=sample) * weights
+        if sample:
+            vae_encode_fn = lambda x: self.vae.encode(x).sample()
+        else:
+            vae_encode_fn = lambda x: self.vae.encode(x).mode()
+        if tiled:
+            model = make_tiled_fn(
+                vae_encode_fn,
+                tile_size,
+                tile_stride,
+                scale_type="down",
+                scale=8,
+                channel=4,
             )
-            count[:, :, hi:hi_end, wi:wi_end] += weights
-        z.div_(count)
+        else:
+            model = vae_encode_fn
+
+        z = model(image) * self.scale_factor
         return z
 
-    def vae_decode(self, z: torch.Tensor) -> torch.Tensor:
-        return self.vae.decode(z / self.scale_factor)
-
-    @count_vram_usage
-    def vae_decode_tiled(
-        self, z: torch.Tensor, tile_size: int, tile_stride: int
+    def vae_decode(
+        self,
+        z: torch.Tensor,
+        tiled: bool = False,
+        tile_size: int = -1,
+        tile_stride: int = -1,
     ) -> torch.Tensor:
-        bs, _, h, w = z.shape
-        image = torch.zeros((bs, 3, h * 8, w * 8), dtype=torch.float32, device=z.device)
-        count = torch.zeros_like(image, dtype=torch.float32)
-        weights = gaussian_weights(tile_size * 8, tile_size * 8)[None, None]
-        weights = torch.tensor(weights, dtype=torch.float32, device=z.device)
-        tiles = sliding_windows(h, w, tile_size, tile_stride)
-        for hi, hi_end, wi, wi_end in tiles:
-            tile_z = z[:, :, hi:hi_end, wi:wi_end]
-            image[:, :, hi * 8 : hi_end * 8, wi * 8 : wi_end * 8] += (
-                self.vae_decode(tile_z) * weights
+        if tiled:
+            model = make_tiled_fn(
+                self.vae.decode,
+                tile_size,
+                tile_stride,
+                scale_type="up",
+                scale=8,
+                channel=3,
             )
-            count[:, :, hi * 8 : hi_end * 8, wi * 8 : wi_end * 8] += weights
-        image.div_(count)
-        return image
+        else:
+            model = self.vae.decode
+        return model(z / self.scale_factor)
 
     def prepare_condition(
-        self, clean: torch.Tensor, txt: List[str]
+        self,
+        cond_img: torch.Tensor,
+        txt: List[str],
+        tiled: bool = False,
+        tile_size: int = -1,
+        tile_stride: int = -1,
     ) -> Dict[str, torch.Tensor]:
         return dict(
             c_txt=self.clip.encode(txt),
-            c_img=self.vae_encode(clean * 2 - 1, sample=False),
-        )
-
-    @count_vram_usage
-    def prepare_condition_tiled(
-        self, clean: torch.Tensor, txt: List[str], tile_size: int, tile_stride: int
-    ) -> Dict[str, torch.Tensor]:
-        return dict(
-            c_txt=self.clip.encode(txt),
-            c_img=self.vae_encode_tiled(
-                clean * 2 - 1, tile_size, tile_stride, sample=False
+            c_img=self.vae_encode(
+                cond_img * 2 - 1,
+                sample=False,
+                tiled=tiled,
+                tile_size=tile_size,
+                tile_stride=tile_stride,
             ),
         )
 

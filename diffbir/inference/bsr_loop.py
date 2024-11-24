@@ -6,7 +6,7 @@ from .loop import InferenceLoop, MODELS
 from ..utils.common import (
     instantiate_from_config,
     load_model_from_url,
-    count_vram_usage,
+    trace_vram_usage,
 )
 from ..pipeline import (
     BSRNetPipeline,

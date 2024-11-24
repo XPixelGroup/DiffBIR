@@ -1,4 +1,4 @@
-from typing import Mapping, Any, Tuple, Callable, Dict
+from typing import Mapping, Any, Tuple, Callable, Dict, Literal
 import importlib
 import os
 from urllib.parse import urlparse
@@ -7,11 +7,12 @@ import torch
 from torch import Tensor
 from torch.nn import functional as F
 import numpy as np
+from tqdm import tqdm
 
 from torch.hub import download_url_to_file, get_dir
 
 
-def get_obj_from_str(string: str, reload: bool=False) -> Any:
+def get_obj_from_str(string: str, reload: bool = False) -> Any:
     module, cls = string.rsplit(".", 1)
     if reload:
         module_imp = importlib.import_module(module)
@@ -41,7 +42,7 @@ def wavelet_blur(image: Tensor, radius: int):
     kernel = kernel[None, None]
     # repeat the kernel across all input channels
     kernel = kernel.repeat(3, 1, 1, 1)
-    image = F.pad(image, (radius, radius, radius, radius), mode='replicate')
+    image = F.pad(image, (radius, radius, radius, radius), mode="replicate")
     # apply convolution
     output = F.conv2d(image, kernel, groups=3, dilation=radius)
     return output
@@ -54,15 +55,15 @@ def wavelet_decomposition(image: Tensor, levels=5):
     """
     high_freq = torch.zeros_like(image)
     for i in range(levels):
-        radius = 2 ** i
+        radius = 2**i
         low_freq = wavelet_blur(image, radius)
-        high_freq += (image - low_freq)
+        high_freq += image - low_freq
         image = low_freq
 
     return high_freq, low_freq
 
 
-def wavelet_reconstruction(content_feat:Tensor, style_feat:Tensor):
+def wavelet_reconstruction(content_feat: Tensor, style_feat: Tensor):
     """
     Apply wavelet decomposition, so that the content will have the same color as the style.
     """
@@ -94,7 +95,7 @@ def load_file_from_url(url, model_dir=None, progress=True, file_name=None):
     """
     if model_dir is None:  # use the pytorch hub_dir
         hub_dir = get_dir()
-        model_dir = os.path.join(hub_dir, 'checkpoints')
+        model_dir = os.path.join(hub_dir, "checkpoints")
 
     os.makedirs(model_dir, exist_ok=True)
 
@@ -119,15 +120,17 @@ def load_model_from_url(url: str) -> Dict[str, torch.Tensor]:
     return sd
 
 
-def sliding_windows(h: int, w: int, tile_size: int, tile_stride: int) -> Tuple[int, int, int, int]:
+def sliding_windows(
+    h: int, w: int, tile_size: int, tile_stride: int
+) -> Tuple[int, int, int, int]:
     hi_list = list(range(0, h - tile_size + 1, tile_stride))
     if (h - tile_size) % tile_stride != 0:
         hi_list.append(h - tile_size)
-    
+
     wi_list = list(range(0, w - tile_size + 1, tile_stride))
     if (w - tile_size) % tile_stride != 0:
         wi_list.append(w - tile_size)
-    
+
     coords = []
     for hi in hi_list:
         for wi in wi_list:
@@ -141,29 +144,137 @@ def gaussian_weights(tile_width: int, tile_height: int) -> np.ndarray:
     latent_width = tile_width
     latent_height = tile_height
     var = 0.01
-    midpoint = (latent_width - 1) / 2  # -1 because index goes from 0 to latent_width - 1
+    midpoint = (
+        latent_width - 1
+    ) / 2  # -1 because index goes from 0 to latent_width - 1
     x_probs = [
-        np.exp(-(x - midpoint) * (x - midpoint) / (latent_width * latent_width) / (2 * var)) / np.sqrt(2 * np.pi * var)
-        for x in range(latent_width)]
+        np.exp(
+            -(x - midpoint) * (x - midpoint) / (latent_width * latent_width) / (2 * var)
+        )
+        / np.sqrt(2 * np.pi * var)
+        for x in range(latent_width)
+    ]
     midpoint = latent_height / 2
     y_probs = [
-        np.exp(-(y - midpoint) * (y - midpoint) / (latent_height * latent_height) / (2 * var)) / np.sqrt(2 * np.pi * var)
-        for y in range(latent_height)]
+        np.exp(
+            -(y - midpoint)
+            * (y - midpoint)
+            / (latent_height * latent_height)
+            / (2 * var)
+        )
+        / np.sqrt(2 * np.pi * var)
+        for y in range(latent_height)
+    ]
     weights = np.outer(y_probs, x_probs)
     return weights
 
 
-COUNT_VRAM = bool(os.environ.get("COUNT_VRAM", False))
+def make_tiled_fn(
+    fn: Callable[[torch.Tensor], torch.Tensor],
+    size: int,
+    stride: int,
+    scale_type: Literal["up", "down"] = "up",
+    scale: int = 1,
+    channel: int | None = None,
+    weight: Literal["uniform", "gaussian"] = "gaussian",
+    dtype: torch.dtype | None = None,
+    device: torch.device | None = None,
+    # callback: Callable[[int, int, int, int], None] | None = None,
+    progress: bool = True,
+) -> Callable[[torch.Tensor], torch.Tensor]:
+    # Only split the first input of function.
+    def tiled_fn(x: torch.Tensor, *args, **kwargs) -> torch.Tensor:
+        if scale_type == "up":
+            scale_fn = lambda n: int(n * scale)
+        else:
+            scale_fn = lambda n: int(n // scale)
 
-def count_vram_usage(func: Callable) -> Callable:
-    if not COUNT_VRAM:
-        return func
-    
-    def wrapper(*args, **kwargs):
-        peak_before = torch.cuda.max_memory_allocated() / (1024 ** 3)
-        ret = func(*args, **kwargs)
+        b, c, h, w = x.size()
+        out_dtype = dtype or x.dtype
+        out_device = device or x.device
+        out_channel = channel or c
+        out = torch.zeros(
+            (b, out_channel, scale_fn(h), scale_fn(w)),
+            dtype=out_dtype,
+            device=out_device,
+        )
+        count = torch.zeros_like(out, dtype=torch.float32)
+        weight_size = scale_fn(size)
+        weights = (
+            gaussian_weights(weight_size, weight_size)[None, None]
+            if weight == "gaussian"
+            else np.ones((1, 1, weight_size, weight_size))
+        )
+        weights = torch.tensor(
+            weights,
+            dtype=out_dtype,
+            device=out_device,
+        )
+
+        indices = sliding_windows(h, w, size, stride)
+        pbar = tqdm(indices, desc=f"Tiled Processing", disable=not progress, leave=False)
+        for hi, hi_end, wi, wi_end in pbar:
+            x_tile = x[..., hi:hi_end, wi:wi_end]
+            out_hi, out_hi_end, out_wi, out_wi_end = map(
+                scale_fn, (hi, hi_end, wi, wi_end)
+            )
+            if len(args) or len(kwargs):
+                kwargs.update(dict(hi=hi, hi_end=hi_end, wi=wi, wi_end=wi_end))
+            out[..., out_hi:out_hi_end, out_wi:out_wi_end] += (
+                fn(x_tile, *args, **kwargs) * weights
+            )
+            count[..., out_hi:out_hi_end, out_wi:out_wi_end] += weights
+            # if callback:
+            # callback(hi, hi_end, wi, wi_end)
+        out = out / count
+        return out
+
+    return tiled_fn
+
+
+TRACE_VRAM = int(os.environ.get("TRACE_VRAM", False))
+
+
+def trace_vram_usage(tag: str) -> Callable:
+    def wrapper_1(func: Callable) -> Callable:
+        if not TRACE_VRAM:
+            return func
+
+        def wrapper_2(*args, **kwargs):
+            peak_before = torch.cuda.max_memory_allocated() / (1024**3)
+            ret = func(*args, **kwargs)
+            torch.cuda.synchronize()
+            peak_after = torch.cuda.max_memory_allocated() / (1024**3)
+            YELLOW = "\033[93m"
+            RESET = "\033[0m"
+            print(
+                f"{YELLOW}VRAM peak before {tag}: {peak_before:.5f} GB, "
+                f"after: {peak_after:.5f} GB{RESET}"
+            )
+            return ret
+
+        return wrapper_2
+
+    return wrapper_1
+
+
+class VRAMPeakMonitor:
+
+    def __init__(self, tag: str) -> None:
+        self.tag = tag
+
+    def __enter__(self):
+        self.peak_before = torch.cuda.max_memory_allocated() / (1024**3)
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
         torch.cuda.synchronize()
-        peak_after = torch.cuda.max_memory_allocated() / (1024 ** 3)
-        print(f"VRAM peak before {func.__name__}: {peak_before:.5f} GB, after: {peak_after:.5f} GB")
-        return ret
-    return wrapper
+        peak_after = torch.cuda.max_memory_allocated() / (1024**3)
+        YELLOW = "\033[93m"
+        RESET = "\033[0m"
+        if TRACE_VRAM:
+            print(
+                f"{YELLOW}VRAM peak before {self.tag}: {self.peak_before:.2f} GB, "
+                f"after: {peak_after:.2f} GB{RESET}"
+            )
+        return False
