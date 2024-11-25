@@ -90,48 +90,93 @@ model:
       linear_start: 0.00085
       linear_end: 0.0120
       timesteps: 1000
-      zero_snr: False
-      parameterization: eps
+      zero_snr: True
+      parameterization: v
 
 dataset:
   train:
-    target: diffbir.dataset.codeformer.CodeformerDataset
+    target: diffbir.dataset.realesrgan.RealESRGANDataset
     params:
-      # training file list path
-      file_list: 
+      # Path to the file list.
+      file_metas:
+        # The training set is formatted as a parquet file.
+        # Each row contains file path, long caption and short caption of a high-quality image.
+        - file_list: 
+          image_path_key: image_path
+          short_prompt_key: llava_short
+          long_prompt_key: llava_long
+
+      p_long_prompt: 0.2
+
       file_backend_cfg:
         target: diffbir.dataset.file_backend.HardDiskBackend
+
       out_size: 512
-      crop_type: center
-      blur_kernel_size: 41
-      kernel_list: ['iso', 'aniso']
-      kernel_prob: [0.5, 0.5]
-      blur_sigma: [0.1, 12]
-      downsample_range: [1, 12]
-      noise_range: [0, 15]
-      jpeg_range: [30, 100]
+      crop_type: none
+
+      use_hflip: false
+      use_rot: false
+
+      blur_kernel_size: 21
+      kernel_list: ['iso', 'aniso', 'generalized_iso', 'generalized_aniso', 'plateau_iso', 'plateau_aniso']
+      kernel_prob: [0.45, 0.25, 0.12, 0.03, 0.12, 0.03]
+      sinc_prob: 0.1
+      blur_sigma: [0.2, 3]
+      betag_range: [0.5, 4]
+      betap_range: [1, 2]
+
+      blur_kernel_size2: 21
+      kernel_list2: ['iso', 'aniso', 'generalized_iso', 'generalized_aniso', 'plateau_iso', 'plateau_aniso']
+      kernel_prob2: [0.45, 0.25, 0.12, 0.03, 0.12, 0.03]
+      sinc_prob2: 0.1
+      blur_sigma2: [0.2, 1.5]
+      betag_range2: [0.5, 4]
+      betap_range2: [1, 2]
+
+      final_sinc_prob: 0.8
+
+      p_empty_prompt: 0.2
 
 batch_transform:
-  target: diffbir.dataset.batch_transform.IdentityBatchTransform
+  target: diffbir.dataset.batch_transform.RealESRGANBatchTransform
+  params:
+    use_sharpener: true
+    # Queue size of training pool, this should be multiples of batch_size (per GPU).
+    queue_size: 256
+    # the first degradation process
+    resize_prob: [0.2, 0.7, 0.1] # up, down, keep
+    resize_range: [0.15, 1.5]
+    gaussian_noise_prob: 0.5
+    noise_range: [1, 30]
+    poisson_scale_range: [0.05, 3]
+    gray_noise_prob: 0.4
+    jpeg_range: [30, 95]
+
+    # the second degradation process
+    stage2_scale: 4
+    second_blur_prob: 0.8
+    resize_prob2: [0.3, 0.4, 0.3] # up, down, keep
+    resize_range2: [0.3, 1.2]
+    gaussian_noise_prob2: 0.5
+    noise_range2: [1, 25]
+    poisson_scale_range2: [0.05, 2.5]
+    gray_noise_prob2: 0.4
+    jpeg_range2: [30, 95]
 
 train:
-  # pretrained sd v2.1 path
+  # pretrained sd v2.1-zsnr path
   sd_path: 
   # experiment directory path
   exp_dir: 
   # stage 1 swinir path.
-  # In our paper, we use SwinIR trained on ImageNet-1k with codeformer degradation.
+  # For DiffBIR v2.1, we use SwinIR trained on ImageNet-1k with RealESRGAN degradation.
   swinir_path: 
-  learning_rate: 1e-4
-  # ImageNet 1k (1.3M images)
-  # batch size = 192, lr = 1e-4, total training steps = 25k
-  # Our filtered laion2b-en (15M images)
-  # batch size = 256, lr = 1e-4 (first 30k), 1e-5 (next 50k), total training steps = 80k
-  batch_size: 256
-  num_workers: 
-  train_steps: 30000
-  log_every: 50
+  learning_rate: 1e-5
+  batch_size: 512
+  num_workers: 16
+  train_steps: 1000000
+  log_every: 100
   ckpt_every: 10000
   image_every: 1000
-  resume: ~
-  noise_aug_timestep: 0
+  resume: 
+  noise_aug_timestep: 200

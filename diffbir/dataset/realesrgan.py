@@ -9,9 +9,9 @@ import torch
 from torch.utils import data
 from PIL import Image
 
-from dataset.degradation import circular_lowpass_kernel, random_mixed_kernels
-from dataset.utils import augment, random_crop_arr, center_crop_arr, load_file_metas
-from utils.common import instantiate_from_config
+from .degradation import circular_lowpass_kernel, random_mixed_kernels
+from .utils import augment, random_crop_arr, center_crop_arr, load_file_metas
+from ..utils.common import instantiate_from_config
 
 
 class RealESRGANDataset(data.Dataset):

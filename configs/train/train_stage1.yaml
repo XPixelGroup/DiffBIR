@@ -51,6 +51,9 @@ dataset:
       noise_range: [0, 15]
       jpeg_range: [30, 100]
 
+batch_transform:
+  target: diffbir.dataset.batch_transform.IdentityBatchTransform
+
 train:
   # experiment directory path
   exp_dir: 

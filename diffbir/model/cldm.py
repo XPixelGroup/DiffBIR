@@ -53,8 +53,6 @@ class ControlLDM(nn.Module):
                 used.add(target_key)
             module.load_state_dict(init_sd, strict=False)
         unused = set(sd.keys()) - used
-        # NOTE: this is slightly different from previous version, which haven't switched
-        # the UNet to eval mode and disabled the requires_grad flag.
         for module in [self.vae, self.clip, self.unet]:
             module.eval()
             module.train = disabled_train

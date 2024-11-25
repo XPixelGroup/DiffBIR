@@ -8,7 +8,7 @@ from torch import Tensor
 from torch.nn import functional as F
 import numpy as np
 from tqdm import tqdm
-
+from PIL import Image, ImageDraw, ImageFont
 from torch.hub import download_url_to_file, get_dir
 
 
@@ -278,3 +278,113 @@ class VRAMPeakMonitor:
                 f"after: {peak_after:.2f} GB{RESET}"
             )
         return False
+
+
+def log_txt_as_img(wh, xc):
+    # wh a tuple of (width, height)
+    # xc a list of captions to plot
+    b = len(xc)
+    txts = list()
+    for bi in range(b):
+        txt = Image.new("RGB", wh, color="white")
+        draw = ImageDraw.Draw(txt)
+        # font = ImageFont.truetype('font/DejaVuSans.ttf', size=size)
+        font = ImageFont.load_default()
+        nc = int(40 * (wh[0] / 256))
+        lines = "\n".join(
+            xc[bi][start : start + nc] for start in range(0, len(xc[bi]), nc)
+        )
+
+        try:
+            draw.text((0, 0), lines, fill="black", font=font)
+        except UnicodeEncodeError:
+            print("Cant encode string for logging. Skipping.")
+
+        txt = np.array(txt).transpose(2, 0, 1) / 127.5 - 1.0
+        txts.append(txt)
+    txts = np.stack(txts)
+    txts = torch.tensor(txts)
+    return txts
+
+
+def to(obj, device):
+    if torch.is_tensor(obj):
+        return obj.to(device)
+    if isinstance(obj, dict):
+        return {k: to(v, device) for k, v in obj.items()}
+    if isinstance(obj, tuple):
+        return tuple(to(v, device) for v in obj)
+    if isinstance(obj, list):
+        return [to(v, device) for v in obj]
+    return obj
+
+
+# https://github.com/XPixelGroup/BasicSR/blob/033cd6896d898fdd3dcda32e3102a792efa1b8f4/basicsr/utils/color_util.py#L186
+def rgb2ycbcr_pt(img, y_only=False):
+    """Convert RGB images to YCbCr images (PyTorch version).
+
+    It implements the ITU-R BT.601 conversion for standard-definition television. See more details in
+    https://en.wikipedia.org/wiki/YCbCr#ITU-R_BT.601_conversion.
+
+    Args:
+        img (Tensor): Images with shape (n, 3, h, w), the range [0, 1], float, RGB format.
+         y_only (bool): Whether to only return Y channel. Default: False.
+
+    Returns:
+        (Tensor): converted images with the shape (n, 3/1, h, w), the range [0, 1], float.
+    """
+    if y_only:
+        weight = torch.tensor([[65.481], [128.553], [24.966]]).to(img)
+        out_img = (
+            torch.matmul(img.permute(0, 2, 3, 1), weight).permute(0, 3, 1, 2) + 16.0
+        )
+    else:
+        weight = torch.tensor(
+            [
+                [65.481, -37.797, 112.0],
+                [128.553, -74.203, -93.786],
+                [24.966, 112.0, -18.214],
+            ]
+        ).to(img)
+        bias = torch.tensor([16, 128, 128]).view(1, 3, 1, 1).to(img)
+        out_img = (
+            torch.matmul(img.permute(0, 2, 3, 1), weight).permute(0, 3, 1, 2) + bias
+        )
+
+    out_img = out_img / 255.0
+    return out_img
+
+
+# https://github.com/XPixelGroup/BasicSR/blob/033cd6896d898fdd3dcda32e3102a792efa1b8f4/basicsr/metrics/psnr_ssim.py#L52
+def calculate_psnr_pt(img, img2, crop_border, test_y_channel=False):
+    """Calculate PSNR (Peak Signal-to-Noise Ratio) (PyTorch version).
+
+    Reference: https://en.wikipedia.org/wiki/Peak_signal-to-noise_ratio
+
+    Args:
+        img (Tensor): Images with range [0, 1], shape (n, 3/1, h, w).
+        img2 (Tensor): Images with range [0, 1], shape (n, 3/1, h, w).
+        crop_border (int): Cropped pixels in each edge of an image. These pixels are not involved in the calculation.
+        test_y_channel (bool): Test on Y channel of YCbCr. Default: False.
+
+    Returns:
+        float: PSNR result.
+    """
+
+    assert (
+        img.shape == img2.shape
+    ), f"Image shapes are different: {img.shape}, {img2.shape}."
+
+    if crop_border != 0:
+        img = img[:, :, crop_border:-crop_border, crop_border:-crop_border]
+        img2 = img2[:, :, crop_border:-crop_border, crop_border:-crop_border]
+
+    if test_y_channel:
+        img = rgb2ycbcr_pt(img, y_only=True)
+        img2 = rgb2ycbcr_pt(img2, y_only=True)
+
+    img = img.to(torch.float64)
+    img2 = img2.to(torch.float64)
+
+    mse = torch.mean((img - img2) ** 2, dim=[1, 2, 3])
+    return 10.0 * torch.log10(1.0 / (mse + 1e-8))

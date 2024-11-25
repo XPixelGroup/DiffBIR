@@ -46,7 +46,6 @@ def extract_into_tensor(
 
 # Copy from: https://github.com/Max-We/sf-zero-signal-to-noise/blob/main/common_diffusion_noise_schedulers_are_flawed.ipynb
 # Original paper: https://arxiv.org/abs/2305.08891
-# Adapted to numpy array input
 def enforce_zero_terminal_snr(betas: np.ndarray) -> np.ndarray:
     betas = torch.from_numpy(betas)
     # Convert betas to alphas_bar_sqrt
