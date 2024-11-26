@@ -7,7 +7,8 @@ from .controlnet import ControlledUnetModel, ControlNet
 from .vae import AutoencoderKL
 from .util import GroupNorm32
 from .clip import FrozenOpenCLIPEmbedder
-from ..utils.common import trace_vram_usage, make_tiled_fn
+from .distributions import DiagonalGaussianDistribution
+from ..utils.tilevae import VAEHook
 
 
 def disabled_train(self: nn.Module) -> nn.Module:
@@ -94,25 +95,27 @@ class ControlLDM(nn.Module):
         sample: bool = True,
         tiled: bool = False,
         tile_size: int = -1,
-        tile_stride: int = -1,
     ) -> torch.Tensor:
-        if sample:
-            vae_encode_fn = lambda x: self.vae.encode(x).sample()
-        else:
-            vae_encode_fn = lambda x: self.vae.encode(x).mode()
         if tiled:
-            model = make_tiled_fn(
-                vae_encode_fn,
-                tile_size,
-                tile_stride,
-                scale_type="down",
-                scale=8,
-                channel=4,
-            )
+            def encoder(x: torch.Tensor) -> DiagonalGaussianDistribution:
+                h = VAEHook(
+                    self.vae.encoder,
+                    tile_size=tile_size,
+                    is_decoder=False,
+                    fast_decoder=False,
+                    fast_encoder=False,
+                    color_fix=True,
+                )(x)
+                moments = self.vae.quant_conv(h)
+                posterior = DiagonalGaussianDistribution(moments)
+                return posterior
         else:
-            model = vae_encode_fn
+            encoder = self.vae.encode
 
-        z = model(image) * self.scale_factor
+        if sample:
+            z = encoder(image).sample() * self.scale_factor
+        else:
+            z = encoder(image).mode() * self.scale_factor
         return z
 
     def vae_decode(
@@ -120,20 +123,22 @@ class ControlLDM(nn.Module):
         z: torch.Tensor,
         tiled: bool = False,
         tile_size: int = -1,
-        tile_stride: int = -1,
     ) -> torch.Tensor:
         if tiled:
-            model = make_tiled_fn(
-                self.vae.decode,
-                tile_size,
-                tile_stride,
-                scale_type="up",
-                scale=8,
-                channel=3,
-            )
+            def decoder(z):
+                z = self.vae.post_quant_conv(z)
+                dec = VAEHook(
+                    self.vae.decoder,
+                    tile_size=tile_size,
+                    is_decoder=True,
+                    fast_decoder=False,
+                    fast_encoder=False,
+                    color_fix=True,
+                )(z)
+                return dec
         else:
-            model = self.vae.decode
-        return model(z / self.scale_factor)
+            decoder = self.vae.decode
+        return decoder(z / self.scale_factor)
 
     def prepare_condition(
         self,
@@ -141,7 +146,6 @@ class ControlLDM(nn.Module):
         txt: List[str],
         tiled: bool = False,
         tile_size: int = -1,
-        tile_stride: int = -1,
     ) -> Dict[str, torch.Tensor]:
         return dict(
             c_txt=self.clip.encode(txt),
@@ -150,7 +154,6 @@ class ControlLDM(nn.Module):
                 sample=False,
                 tiled=tiled,
                 tile_size=tile_size,
-                tile_stride=tile_stride,
             ),
         )
 

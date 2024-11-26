@@ -123,15 +123,20 @@ def parse_args() -> Namespace:
         "--cleaner_tile_stride", type=int, default=256, help="Stride between tiles."
     )
     parser.add_argument(
-        "--vae_tiled",
+        "--vae_encoder_tiled",
         action="store_true",
-        help="Enable tiled inference for AE, which reduces the GPU memory usage.",
+        help="Enable tiled inference for AE encoder, which reduces the GPU memory usage.",
     )
     parser.add_argument(
-        "--vae_tile_size", type=int, default=256, help="Size of each tile."
+        "--vae_encoder_tile_size", type=int, default=256, help="Size of each tile."
     )
     parser.add_argument(
-        "--vae_tile_stride", type=int, default=128, help="Stride between tiles."
+        "--vae_decoder_tiled",
+        action="store_true",
+        help="Enable tiled inference for AE decoder, which reduces the GPU memory usage.",
+    )
+    parser.add_argument(
+        "--vae_decoder_tile_size", type=int, default=256, help="Size of each tile."
     )
     parser.add_argument(
         "--cldm_tiled",
@@ -257,10 +262,13 @@ def parse_args() -> Namespace:
         "--output", type=str, required=True, help="Path to save restored results."
     )
     parser.add_argument("--seed", type=int, default=231)
+    # mps has not been tested
     parser.add_argument(
         "--device", type=str, default="cuda", choices=["cpu", "cuda", "mps"]
     )
-    parser.add_argument("--precision", type=str, default="fp16", choices=["fp32", "fp16", "bf16"])
+    parser.add_argument(
+        "--precision", type=str, default="fp16", choices=["fp32", "fp16", "bf16"]
+    )
     parser.add_argument("--llava_bit", type=str, default="4", choices=["16", "8", "4"])
 
     return parser.parse_args()

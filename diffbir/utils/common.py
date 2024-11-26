@@ -212,7 +212,9 @@ def make_tiled_fn(
         )
 
         indices = sliding_windows(h, w, size, stride)
-        pbar = tqdm(indices, desc=f"Tiled Processing", disable=not progress, leave=False)
+        pbar = tqdm(
+            indices, desc=f"Tiled Processing", disable=not progress, leave=False
+        )
         for hi, hi_end, wi, wi_end in pbar:
             x_tile = x[..., hi:hi_end, wi:wi_end]
             out_hi, out_hi_end, out_wi, out_wi_end = map(
@@ -224,8 +226,6 @@ def make_tiled_fn(
                 fn(x_tile, *args, **kwargs) * weights
             )
             count[..., out_hi:out_hi_end, out_wi:out_wi_end] += weights
-            # if callback:
-            # callback(hi, hi_end, wi, wi_end)
         out = out / count
         return out
 

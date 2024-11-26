@@ -92,9 +92,7 @@ class InferenceLoop:
             config = "configs/inference/diffusion.yaml"
         else:
             config = "configs/inference/diffusion_v2.1.yaml"
-        self.diffusion: Diffusion = instantiate_from_config(
-            OmegaConf.load(config)
-        )
+        self.diffusion: Diffusion = instantiate_from_config(OmegaConf.load(config))
         self.diffusion.to(self.args.device)
 
     def load_cond_fn(self) -> None:
@@ -161,7 +159,7 @@ class InferenceLoop:
             "fp16": torch.float16,
             "bf16": torch.bfloat16,
         }[self.args.precision]
-        
+
         for lq in self.load_lq():
             # prepare prompt
             with VRAMPeakMonitor("applying captioner"):
@@ -187,9 +185,10 @@ class InferenceLoop:
                         self.args.cleaner_tiled,
                         self.args.cleaner_tile_size,
                         self.args.cleaner_tile_stride,
-                        self.args.vae_tiled,
-                        self.args.vae_tile_size,
-                        self.args.vae_tile_stride,
+                        self.args.vae_encoder_tiled,
+                        self.args.vae_encoder_tile_size,
+                        self.args.vae_decoder_tiled,
+                        self.args.vae_decoder_tile_size,
                         self.args.cldm_tiled,
                         self.args.cldm_tile_size,
                         self.args.cldm_tile_stride,
