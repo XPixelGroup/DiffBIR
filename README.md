@@ -30,7 +30,7 @@
 - [Visual Results On Real-world Images](#visual_results)
 - [TODO](#todo)
 - [Installation](#installation)
-- [Quick Start](#quick-start)
+- [Quick Start](#quick_start)
 - [Pretrained Models](#pretrained_models)
 - [Inference](#inference)
 - [Train](#train)
