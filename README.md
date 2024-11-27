@@ -37,7 +37,7 @@
 
 ## <a name="update"></a>:new:Update
 
-- **2024.11.27**: ✅ Release DiffBIR v2.1, including a **new model** trained on unsplash dataset with [LLaVA]()-generated captions, more samplers, better tiled-sampling support and so on. Check release note for details.
+- **2024.11.27**: ✅ Release DiffBIR v2.1, including a **new model** trained on unsplash dataset with [LLaVA]()-generated captions, more samplers, better tiled-sampling support and so on. Check [release note](https://github.com/XPixelGroup/DiffBIR/releases/tag/v2.1.0) for details.
 - **2024.04.08**: ✅ Release everything about our [updated manuscript](https://arxiv.org/abs/2308.15070), including (1) a **new model** trained on subset of laion2b-en and (2) a **more readable code base**, etc. DiffBIR is now a general restoration pipeline that could handle different blind image restoration tasks with a unified generation module.
 - **2023.09.19**: ✅ Add support for Apple Silicon! Check [installation_xOS.md](assets/docs/installation_xOS.md) to work with **CPU/CUDA/MPS** device!
 - **2023.09.14**: ✅ Integrate a patch-based sampling strategy ([mixture-of-diffusers](https://github.com/albarji/mixture-of-diffusers)). [**Try it!**](#tiled-sampling) Here is an [example](https://imgsli.com/MjA2MDA1) with a resolution of 2396 x 1596. GPU memory usage will continue to be optimized in the future and we are looking forward to your pull requests!
