@@ -36,9 +36,10 @@
 
 ## <a name="update"></a>:new:Update
 
+- **2024.11.27**: ✅ Release DiffBIR v2.1, including a **new model** trained on unsplash dataset with [LLaVA]()-generated captions, more samplers, better tiled-sampling support and so on. Check release note for details.
 - **2024.04.08**: ✅ Release everything about our [updated manuscript](https://arxiv.org/abs/2308.15070), including (1) a **new model** trained on subset of laion2b-en and (2) a **more readable code base**, etc. DiffBIR is now a general restoration pipeline that could handle different blind image restoration tasks with a unified generation module.
 - **2023.09.19**: ✅ Add support for Apple Silicon! Check [installation_xOS.md](assets/docs/installation_xOS.md) to work with **CPU/CUDA/MPS** device!
-- **2023.09.14**: ✅ Integrate a patch-based sampling strategy ([mixture-of-diffusers](https://github.com/albarji/mixture-of-diffusers)). [**Try it!**](#patch-based-sampling) Here is an [example](https://imgsli.com/MjA2MDA1) with a resolution of 2396 x 1596. GPU memory usage will continue to be optimized in the future and we are looking forward to your pull requests!
+- **2023.09.14**: ✅ Integrate a patch-based sampling strategy ([mixture-of-diffusers](https://github.com/albarji/mixture-of-diffusers)). [**Try it!**](#tiled-sampling) Here is an [example](https://imgsli.com/MjA2MDA1) with a resolution of 2396 x 1596. GPU memory usage will continue to be optimized in the future and we are looking forward to your pull requests!
 - **2023.09.14**: ✅ Add support for background upsampler (DiffBIR/[RealESRGAN](https://github.com/xinntao/Real-ESRGAN)) in face enhancement! :rocket: [**Try it!**](#inference_fr)
 - **2023.09.13**: :rocket: Provide online demo (DiffBIR-official) in [OpenXLab](https://openxlab.org.cn/apps/detail/linxinqi/DiffBIR-official), which integrates both general model and face model. Please have a try! [camenduru](https://github.com/camenduru) also implements an online demo, thanks for his work.:hugs:
 - **2023.09.12**: ✅ Upload inference code of latent image guidance and release [real47](inputs/real47) testset.
@@ -72,7 +73,7 @@
 [<img src="assets/visual_results/bid1.png" height="215px"/>](https://imgsli.com/MjUzNzkz) [<img src="assets/visual_results/bid3.png" height="215px"/>](https://imgsli.com/MjUzNzky)
 [<img src="assets/visual_results/bid2.png" height="215px"/>](https://imgsli.com/MjUzNzkx)
 
-### 8x Blind Super-Resolution With Patch-based Sampling
+### 8x Blind Super-Resolution With Tiled Sampling
 
 > I often think of Bag End. I miss my books and my arm chair, and my garden. See, that's where I belong. That's home. --- Bilbo Baggins
 
@@ -84,14 +85,14 @@
 - [x] Update links to paper and project page :link:.
 - [x] Release real47 testset :minidisc:.
 - [ ] Provide webui.
-- [ ] Reduce the vram usage of DiffBIR :fire::fire::fire:.
+- [x] Reduce the vram usage of DiffBIR :fire::fire::fire:.
 - [ ] Provide HuggingFace demo :notebook:.
 - [x] Add a patch-based sampling schedule :mag:.
 - [x] Upload inference code of latent image guidance :page_facing_up:.
-- [ ] Improve the performance :superhero:.
+- [x] Improve the performance :superhero:.
 - [x] Support MPS acceleration for MacOS users.
 - [ ] DiffBIR-turbo :fire::fire::fire:.
-- [ ] Speed up inference, such as using fp16/bf16, torch.compile :fire::fire::fire:.
+- [x] Speed up inference, such as using fp16/bf16, torch.compile :fire::fire::fire:.
 
 ## <a name="installation"></a>:gear:Installation
 
@@ -109,106 +110,184 @@ pip install -r requirements.txt
 Our new code is based on pytorch 2.2.2 for the built-in support of memory-efficient attention. If you are working on a GPU that is not compatible with the latest pytorch, just downgrade pytorch to 1.13.1+cu116 and install xformers 0.0.16 as an alternative.
 <!-- Note the installation is only compatible with **Linux** users. If you are working on different platforms, please check [xOS Installation](assets/docs/installation_xOS.md). -->
 
+## <a name="quick_start"></a>:flight_departure:Quick Start
+
+Run the following command to interact with the gradio website.
+
+```shell
+python run_gradio.py
+```
+
+<div align="center">
+    <kbd><img src="assets/gradio.png"></img></kbd>
+</div>
+
 ## <a name="pretrained_models"></a>:dna:Pretrained Models
 
 Here we list pretrained weight of stage 2 model (IRControlNet) and our trained SwinIR, which was used for degradation removal during the training of stage 2 model.
 
 | Model Name | Description | HuggingFace | BaiduNetdisk | OpenXLab |
 | :---------: | :----------: | :----------: | :----------: | :----------: |
+| v2.1.pt | IRControlNet trained on filtered unsplash | [download](https://huggingface.co/lxq007/DiffBIR-v2/resolve/main/DiffBIR_v2.1.pt) | N/A | N/A |
 | v2.pth | IRControlNet trained on filtered laion2b-en  | [download](https://huggingface.co/lxq007/DiffBIR-v2/resolve/main/v2.pth) | [download](https://pan.baidu.com/s/1uTAFl13xgGAzrnznAApyng?pwd=xiu3)<br>(pwd: xiu3) | [download](https://openxlab.org.cn/models/detail/linxinqi/DiffBIR/tree/main) |
 | v1_general.pth | IRControlNet trained on ImageNet-1k | [download](https://huggingface.co/lxq007/DiffBIR-v2/resolve/main/v1_general.pth) | [download](https://pan.baidu.com/s/1PhXHAQSTOUX4Gy3MOc2t2Q?pwd=79n9)<br>(pwd: 79n9) | [download](https://openxlab.org.cn/models/detail/linxinqi/DiffBIR/tree/main) |
 | v1_face.pth | IRControlNet trained on FFHQ | [download](https://huggingface.co/lxq007/DiffBIR-v2/resolve/main/v1_face.pth) | [download](https://pan.baidu.com/s/1kvM_SB1VbXjbipLxdzlI3Q?pwd=n7dx)<br>(pwd: n7dx) | [download](https://openxlab.org.cn/models/detail/linxinqi/DiffBIR/tree/main) |
 | codeformer_swinir.ckpt | SwinIR trained on ImageNet-1k | [download](https://huggingface.co/lxq007/DiffBIR-v2/resolve/main/codeformer_swinir.ckpt) | [download](https://pan.baidu.com/s/176fARg2ySYtDgX2vQOeRbA?pwd=vfif)<br>(pwd: vfif) | [download](https://openxlab.org.cn/models/detail/linxinqi/DiffBIR/tree/main) |
 
-During inference, we use off-the-shelf models from other papers as the stage 1 model: [BSRNet](https://github.com/cszn/BSRGAN) for BSR, [SwinIR-Face](https://github.com/zsyOAOA/DifFace) used in DifFace for BFR, and [SCUNet-PSNR](https://github.com/cszn/SCUNet) for BID, while the trained IRControlNet remains **unchanged** for all tasks. Please check [code](utils/inference.py) for more details. Thanks for their work!
-
-<!-- ## <a name="quick_start"></a>:flight_departure:Quick Start
-
-Download [general_full_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_full_v1.ckpt) and [general_swinir_v1.ckpt](https://huggingface.co/lxq007/DiffBIR/resolve/main/general_swinir_v1.ckpt) to `weights/`, then run the following command to interact with the gradio website.
-
-```shell
-python gradio_diffbir.py \
---ckpt weights/general_full_v1.ckpt \
---config configs/model/cldm.yaml \
---reload_swinir \
---swinir_ckpt weights/general_swinir_v1.ckpt \
---device cuda
-```
-
-<div align="center">
-    <kbd><img src="assets/gradio.png"></img></kbd>
-</div> -->
+During inference, we use off-the-shelf models from other papers as the stage 1 model: [BSRNet](https://github.com/cszn/BSRGAN) for BSR, [SwinIR-Face](https://github.com/zsyOAOA/DifFace) used in DifFace for BFR, and [SCUNet-PSNR](https://github.com/cszn/SCUNet) for BID, while the trained IRControlNet remains **unchanged** for all tasks. Please check [code](diffbir/inference/pretrained_models.py) for more details. Thanks for their work!
 
 ## <a name="inference"></a>:crossed_swords:Inference
 
-We provide some examples for inference, check [inference.py](inference.py) for more arguments. Pretrained weights will be **automatically downloaded**.
+We provide some examples for inference, check [inference.py](inference.py) for more arguments. Pretrained weights will be **automatically downloaded**. For users with limited VRAM, please run the following scripts with [tiled sampling](#tiled-sampling).
 
 ### Blind Image Super-Resolution
 
 ```shell
+# DiffBIR v2 (ECCV paper version)
 python -u inference.py \
---version v2 \
 --task sr \
 --upscale 4 \
---cfg_scale 4.0 \
+--version v2 \
+--sampler spaced \
+--steps 50 \
+--captioner none \
+--pos_prompt '' \
+--neg_prompt 'low quality, blurry, low-resolution, noisy, unsharp, weird textures' \
+--cfg_scale 4 \
 --input inputs/demo/bsr \
---output results/demo_bsr \
---device cuda
+--output results/v2_demo_bsr \
+--device cuda --precision fp32
+
+# DiffBIR v2.1
+python -u inference.py \
+--task sr \
+--upscale 4 \
+--version v2.1 \
+--captioner llava \
+--cfg_scale 8 \
+--noise_aug 0 \
+--input inputs/demo/bsr \
+--output results/v2.1_demo_bsr
 ```
 
-### Blind Face Restoration
+### Blind Aligned-Face Restoration
 <a name="inference_fr"></a>
 
 ```shell
-# for aligned face inputs
+# DiffBIR v2 (ECCV paper version)
 python -u inference.py \
---version v2 \
---task fr \
+--task face \
 --upscale 1 \
+--version v2 \
+--sampler spaced \
+--steps 50 \
+--captioner none \
+--pos_prompt '' \
+--neg_prompt 'low quality, blurry, low-resolution, noisy, unsharp, weird textures' \
 --cfg_scale 4.0 \
 --input inputs/demo/bfr/aligned \
---output results/demo_bfr_aligned \
---device cuda
+--output results/v2_demo_bfr_aligned \
+--device cuda --precision fp32
+
+# DiffBIR v2.1
+python -u inference.py \
+--task face \
+--upscale 1 \
+--version v2.1 \
+--captioner llava \
+--cfg_scale 8 \
+--noise_aug 0 \
+--input inputs/demo/bfr/aligned \
+--output results/v2.1_demo_bfr_aligned
 ```
 
+### Blind Unaligned-Face Restoration
+
 ```shell
-# for unaligned face inputs
+# DiffBIR v2 (ECCV paper version)
 python -u inference.py \
---version v2 \
---task fr_bg \
+--task face_background \
 --upscale 2 \
+--version v2 \
+--sampler spaced \
+--steps 50 \
+--captioner none \
+--pos_prompt '' \
+--neg_prompt 'low quality, blurry, low-resolution, noisy, unsharp, weird textures' \
 --cfg_scale 4.0 \
 --input inputs/demo/bfr/whole_img \
---output results/demo_bfr_unaligned \
---device cuda
+--output results/v2_demo_bfr_unaligned \
+--device cuda --precision fp32
+
+# DiffBIR v2.1
+python -u inference.py \
+--task face_background \
+--upscale 2 \
+--version v2.1 \
+--captioner llava \
+--cfg_scale 8 \
+--noise_aug 0 \
+--input inputs/demo/bfr/whole_img \
+--output results/v2.1_demo_bfr_unaligned
 ```
 
 ### Blind Image Denoising
 
 ```shell
+# DiffBIR v2 (ECCV paper version)
 python -u inference.py \
---version v2 \
---task dn \
+--task denoise \
 --upscale 1 \
+--version v2 \
+--sampler spaced \
+--steps 50 \
+--captioner none \
+--pos_prompt '' \
+--neg_prompt 'low quality, blurry, low-resolution, noisy, unsharp, weird textures' \
 --cfg_scale 4.0 \
 --input inputs/demo/bid \
---output results/demo_bid \
---device cuda
+--output results/v2_demo_bid \
+--device cuda --precision fp32
+
+# DiffBIR v2.1
+python -u inference.py \
+--task denoise \
+--upscale 1 \
+--version v2.1 \
+--captioner llava \
+--cfg_scale 8 \
+--noise_aug 0 \
+--input inputs/demo/bid \
+--output results/v2.1_demo_bid
 ```
 
 ### Other options
 
-#### Patch-based sampling
+#### Tiled sampling
 <a name="patch_based_sampling"></a>
 
-Add the following arguments to enable patch-based sampling:
+Add the following arguments to enable tiled sampling:
 
 ```shell
-[command...] --tiled --tile_size 512 --tile_stride 256
+[command...] \
+# tiled inference for stage-1 model
+--cleaner_tiled \
+--cleaner_tile_size 256 \
+--cleaner_tile_stride 128 \
+# tiled inference for VAE encoding
+--vae_encoder_tiled \
+--vae_encoder_tile_size 256 \
+# tiled inference for VAE decoding
+--vae_decoder_tiled \
+--vae_decoder_tile_size 256 \
+# tiled inference for diffusion process
+--cldm_tiled \
+--cldm_tile_size 512 \
+--cldm_tile_stride 256
 ```
 
-Patch-based sampling supports super-resolution with a large scale factor. Our patch-based sampling is built upon [mixture-of-diffusers](https://github.com/albarji/mixture-of-diffusers). Thanks for their work!
-
+Tiled sampling supports super-resolution with a large scale factor on low-VRAM graphics cards. Our tiled sampling is built upon [mixture-of-diffusers](https://github.com/albarji/mixture-of-diffusers) and [Tiled-VAE](https://github.com/pkuliyi2015/multidiffusion-upscaler-for-automatic1111). Thanks for their work!
+<!-- 
 #### Restoration Guidance
 
 Restoration guidance is used to achieve a trade-off bwtween quality and fidelity. We default to closing it since we prefer quality rather than fidelity. Here is an example:
@@ -225,21 +304,20 @@ python -u inference.py \
 --device cuda
 ```
 
-You will see that the results become more smooth.
+You will see that the results become more smooth. -->
 
-#### Better Start Point For Sampling
+#### Condition as Start Point of Sampling
 
-Add the following argument to offer better start point for reverse sampling:
+**This option only works with DiffBIR v1 and v2.** As proposed in [SeeSR](https://arxiv.org/abs/2311.16518), the LR embedding (LRE) strategy provides a more faithful
+start point for sampling and consequently suppresses the artifacts in flat region:
 
 ```shell
-[command...] --better_start
+[command...] --start_point_type cond
 ```
 
-This option prevents our model from generating noise in 
-image background.
+For our model, we use the diffused condition as start point. This option makes the results more stable and ensures that the outcomes from ODE samplers like DDIM and DPMS are normal. However, it may lead to a decrease in sample quality.
 
 ## <a name="train"></a>:stars:Train
-
 
 ### Stage 1
 

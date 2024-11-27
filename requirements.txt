@@ -17,7 +17,8 @@ tensorboard==2.16.2 # for tensorboard event visualization
 protobuf==4.25.3 # for tensorboard
 lpips==0.1.4
 facexlib==0.3.0
-gradio==4.25.0
+gradio==4.43.0
+polars==1.12.0
 
 # requirements for llava
 transformers==4.37.2
