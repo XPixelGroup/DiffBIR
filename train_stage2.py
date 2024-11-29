@@ -194,7 +194,7 @@ def main(args) -> None:
                         model=cldm,
                         device=device,
                         steps=50,
-                        x_size=z_0.shape,
+                        x_size=(len(log_gt), *z_0.shape[1:]),
                         cond=log_cond,
                         uncond=None,
                         cfg_scale=1.0,

@@ -116,7 +116,8 @@ Our new code is based on pytorch 2.2.2 for the built-in support of memory-effici
 Run the following command to interact with the gradio website.
 
 ```shell
-python run_gradio.py
+# For low-VRAM users, set captioner to ram or none
+python run_gradio.py --captioner llava
 ```
 
 <div align="center">

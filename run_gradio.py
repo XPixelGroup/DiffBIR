@@ -28,6 +28,10 @@ from diffbir.utils.caption import (
 torch.set_grad_enabled(False)
 
 # This gradio script only support DiffBIR v2.1
+parser = ArgumentParser()
+parser.add_argument("--captioner", type=str, choices=["none", "ram", "llava"], required=True)
+parser.add_argument("--llava_bit", type=str, choices=["4", "8", "16"], default="4")
+args = parser.parse_args()
 
 # Set max height and width to constraint inference time for online demo
 max_height = 2048
@@ -36,11 +40,10 @@ max_width = 2048
 tasks = ["sr", "face"]
 device = "cuda"
 precision = "fp16"
-llava_bit = "8"
+llava_bit = args.llava_bit
 # Set captioner to llava or ram to enable auto-caption
-captioner = "llava"
+captioner = args.captioner
 
-assert captioner in ["none", "llava", "ram"]
 if captioner == "llava":
     assert LLAVA_AVAILABLE
 elif captioner == "ram":
@@ -297,7 +300,7 @@ with block:
                     label="Classifier-free guidance (cfg) scale",
                     minimum=1,
                     maximum=10,
-                    value=1,
+                    value=8,
                     step=1,
                 )
                 rescale_cfg = gr.Checkbox(value=False, label="Gradually increase cfg scale")
