@@ -264,6 +264,21 @@ python -u inference.py \
 --output results/v2.1_demo_bid
 ```
 
+### Custom-model Inference
+
+```shell
+python -u inference.py \
+--upscale 4 \
+--version custom \
+--train_cfg [path/to/training/config] \
+--ckpt [path/to/saved/checkpoint] \
+--captioner llava \
+--cfg_scale 8 \
+--noise_aug 0 \
+--input inputs/demo/bsr \
+--output results/custom_demo_bsr
+```
+
 ### Other options
 
 #### Tiled sampling

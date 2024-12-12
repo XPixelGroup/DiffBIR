@@ -8,6 +8,7 @@ from diffbir.inference import (
     BFRInferenceLoop,
     BIDInferenceLoop,
     UnAlignedBFRInferenceLoop,
+    CustomInferenceLoop,
 )
 
 
@@ -59,7 +60,7 @@ def parse_args() -> Namespace:
         type=str,
         default="sr",
         choices=["sr", "face", "denoise", "unaligned_face"],
-        help="Task you want to do.",
+        help="Task you want to do. Ignore this option if you are using self-trained model.",
     )
     parser.add_argument(
         "--upscale", type=float, default=4, help="Upscale factor of output."
@@ -68,8 +69,20 @@ def parse_args() -> Namespace:
         "--version",
         type=str,
         default="v2.1",
-        choices=["v1", "v2", "v2.1"],
+        choices=["v1", "v2", "v2.1", "custom"],
         help="DiffBIR model version.",
+    )
+    parser.add_argument(
+        "--train_cfg",
+        type=str,
+        default="",
+        help="Path to training config. Only works when version is custom.",
+    )
+    parser.add_argument(
+        "--ckpt",
+        type=str,
+        default="",
+        help="Path to saved checkpoint. Only works when version is custom.",
     )
     # sampling parameters
     parser.add_argument(
@@ -278,13 +291,17 @@ def main():
     args = parse_args()
     args.device = check_device(args.device)
     set_seed(args.seed)
-    loops = {
-        "sr": BSRInferenceLoop,
-        "denoise": BIDInferenceLoop,
-        "face": BFRInferenceLoop,
-        "unaligned_face": UnAlignedBFRInferenceLoop,
-    }
-    loops[args.task](args).run()
+
+    if args.version != "custom":
+        loops = {
+            "sr": BSRInferenceLoop,
+            "denoise": BIDInferenceLoop,
+            "face": BFRInferenceLoop,
+            "unaligned_face": UnAlignedBFRInferenceLoop,
+        }
+        loops[args.task](args).run()
+    else:
+        CustomInferenceLoop(args).run()
     print("done!")
 
 
